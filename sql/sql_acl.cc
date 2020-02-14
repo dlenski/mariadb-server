@@ -176,6 +176,15 @@ TABLE_FIELD_TYPE mysql_db_table_fields[MYSQL_DB_FIELD_COUNT] = {
 const TABLE_FIELD_DEF
 mysql_db_table_def= {MYSQL_DB_FIELD_COUNT, mysql_db_table_fields, 0, (uint*) 0 };
 
+const char *safe_vio_type_name(Vio *vio)
+{
+  size_t unused;
+#ifdef EMBEDDED_LIBRARY
+  if (!vio) return "Internal";
+#endif
+  return vio_type_name(vio_type(vio), &unused);
+}
+
 static LEX_STRING native_password_plugin_name= {
   C_STRING_WITH_LEN("mysql_native_password")
 };
