@@ -1003,7 +1003,7 @@ static void mysql57_calculate_null_position(TABLE_SHARE *share,
     expression
 */
 bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
-                     bool *error_reported, vcol_init_mode mode)
+                     bool *error_reported, bool *corrupted, vcol_init_mode mode)
 {
   CHARSET_INFO *save_character_set_client= thd->variables.character_set_client;
   CHARSET_INFO *save_collation= thd->variables.collation_connection;
@@ -1019,6 +1019,7 @@ bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
   Virtual_column_info *vcol= 0;
   StringBuffer<MAX_FIELD_WIDTH> expr_str;
   bool res= 1;
+  *corrupted= true;
   DBUG_ENTER("parse_vcol_defs");
 
   if (check_constraint_ptr)
@@ -1157,7 +1158,10 @@ bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
     if (check_vcol_forward_refs(field, field->vcol_info) ||
         check_vcol_forward_refs(field, field->check_constraint) ||
         check_vcol_forward_refs(field, field->default_value))
+    {
+      *corrupted= false;
       goto end;
+    }
   }
 
   res=0;
@@ -3275,10 +3279,12 @@ enum open_frm_error open_table_from_share(THD *thd, TABLE_SHARE *share,
       break;
     }
 #endif
+    bool corrupted= false;
     if (parse_vcol_defs(thd, &outparam->mem_root, outparam,
-                        &error_reported, mode))
+                        &error_reported, &corrupted, mode))
     {
-      error= OPEN_FRM_CORRUPTED;
+      if (corrupted)
+        error= OPEN_FRM_CORRUPTED;
       goto err;
     }
 

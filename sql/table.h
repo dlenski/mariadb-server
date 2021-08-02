@@ -2894,7 +2894,8 @@ bool fix_session_vcol_expr(THD *thd, Virtual_column_info *vcol);
 bool fix_session_vcol_expr_for_read(THD *thd, Field *field,
                                     Virtual_column_info *vcol);
 bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
-                     bool *error_reported, vcol_init_mode expr);
+                     bool *error_reported, bool *corrupted,
+                     vcol_init_mode expr);
 TABLE_SHARE *alloc_table_share(const char *db, const char *table_name,
                                const char *key, uint key_length);
 void init_tmp_table_share(THD *thd, TABLE_SHARE *share, const char *key,

@@ -2526,13 +2526,18 @@ TABLE *Delayed_insert::get_local_table(THD* client_thd)
       share->default_fields)
   {
     bool error_reported= FALSE;
+    bool corrupted= false;
     if (!(copy->def_vcol_set= (MY_BITMAP*) alloc_root(client_thd->mem_root,
                                                       sizeof(MY_BITMAP))))
       goto error;
 
     if (parse_vcol_defs(client_thd, client_thd->mem_root, copy, &error_reported,
+                        &corrupted,
                         VCOL_INIT_DEPENDENCY_FAILURE_IS_WARNING))
+    {
+      DBUG_ASSERT(!corrupted);
       goto error;
+    }
   }
 
   switch_defaults_to_nullable_trigger_fields(copy);
