@@ -6345,9 +6345,7 @@ static MYSQL_METHODS local_methods=
 
 Atomic_counter<uint32_t> local_connection_thread_count;
 
-extern "C" MYSQL *mysql_real_connect_local(MYSQL *mysql,
-    const char *host, const char *user, const char *db,
-    unsigned long clientflag)
+extern "C" MYSQL *mysql_real_connect_local(MYSQL *mysql)
 {
   THD *thd_orig= current_thd;
   THD *new_thd;
@@ -6361,17 +6359,7 @@ extern "C" MYSQL *mysql_real_connect_local(MYSQL *mysql,
     DBUG_RETURN(0);
   }
 
-  if (!host || !host[0])
-    host= mysql->options.host;
-
   mysql->methods= &local_methods;
-
-  if (!db || !db[0])
-    db=mysql->options.db;
-
-  if (!user || !user[0])
-    user=mysql->options.user;
-
   mysql->user= NULL;
 
   mysql->info_buffer= (char *) my_malloc(PSI_INSTRUMENT_ME,
