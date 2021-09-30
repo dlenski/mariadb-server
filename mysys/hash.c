@@ -356,8 +356,11 @@ static void movelink(HASH_LINK *array,uint find,uint next_link,uint newlink)
     length length of key
 
   NOTES:
-    If length is 0, comparison is done using the length of the
-    record being compared against.
+    length equal 0 can mean 2 things:
+      1) it is fixed key length hash (HASH::key_length != 0) and
+      default length should be taken in this case
+      2) it is really 0 length key for variable key length hash
+      (HASH::key_length == 0)
 
   RETURN
     = 0  key of record == key
@@ -368,10 +371,13 @@ static int hashcmp(const HASH *hash, HASH_LINK *pos, const uchar *key,
                    size_t length)
 {
   size_t rec_keylength;
-  uchar *rec_key= (uchar*) my_hash_key(hash, pos->data, &rec_keylength, 1);
-  return ((length && length != rec_keylength) ||
+  uchar *rec_key;
+  if (!length)
+    length= hash->key_length; // length for fixed length keys or 0
+  rec_key= (uchar*) my_hash_key(hash, pos->data, &rec_keylength, 1);
+  return (length != rec_keylength) ||
 	  my_strnncoll(hash->charset, (uchar*) rec_key, rec_keylength,
-		       (uchar*) key, rec_keylength));
+		       (uchar*) key, rec_keylength);
 }
 
 
