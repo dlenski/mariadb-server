@@ -12837,6 +12837,7 @@ insert:
             Lex->sql_command= SQLCOM_INSERT;
             Lex->duplicates= DUP_ERROR;
             thd->get_stmt_da()->opt_clear_warning_info(thd->query_id);
+            thd->get_stmt_da()->reset_current_row_for_warning(1);
           }
           insert_start insert_lock_option opt_ignore opt_into insert_table
           {
@@ -12846,7 +12847,7 @@ insert:
           stmt_end
           {
             Lex->mark_first_table_as_inserting();
-            thd->get_stmt_da()->reset_current_row_for_warning();
+            thd->get_stmt_da()->reset_current_row_for_warning(0);
           }
           ;
 
@@ -12856,6 +12857,7 @@ replace:
             Lex->sql_command = SQLCOM_REPLACE;
             Lex->duplicates= DUP_REPLACE;
             thd->get_stmt_da()->opt_clear_warning_info(thd->query_id);
+            thd->get_stmt_da()->reset_current_row_for_warning(1);
           }
           insert_start replace_lock_option opt_into insert_table
           {
@@ -12865,7 +12867,7 @@ replace:
           stmt_end
           {
             Lex->mark_first_table_as_inserting();
-            thd->get_stmt_da()->reset_current_row_for_warning();
+            thd->get_stmt_da()->reset_current_row_for_warning(0);
           }
           ;
 
