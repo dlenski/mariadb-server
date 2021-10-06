@@ -40,7 +40,6 @@ Created 11/11/1995 Heikki Tuuri
 #include "log0crypt.h"
 #include "srv0mon.h"
 #include "fil0pagecompress.h"
-#include "transactional_lock_guard.h"
 #ifdef HAVE_LZO
 # include "lzo/lzo1x.h"
 #elif defined HAVE_SNAPPY
@@ -326,15 +325,8 @@ buf_flush_relocate_on_flush_list(
 	ut_d(buf_flush_validate_low());
 }
 
-#ifndef NO_ELISION
-/** Increment a counter in a race-condition prone way. */
-TPOOL_SUPPRESS_TSAN static inline void inc_n_pages_written()
-{ buf_pool.stat.n_pages_written++; }
-#endif
-
 /** Complete write of a file page from buf_pool.
 @param request write request */
-TRANSACTIONAL_TARGET
 void buf_page_write_complete(const IORequest &request)
 {
   ut_ad(request.is_write());
@@ -373,33 +365,8 @@ void buf_page_write_complete(const IORequest &request)
                         bpage->id().space(), bpage->id().page_no()));
   const bool temp= fsp_is_system_temporary(bpage->id().space());
 
-  mysql_mutex_assert_not_owner(&buf_pool.flush_list_mutex);
-#ifndef NO_ELISION
-  if (have_transactional_memory && !request.is_LRU() && xbegin())
-  {
-# ifndef DBUG_OFF
-    if (bpage->oldest_modification() < 2 || bpage->io_fix() != BUF_IO_WRITE)
-      xend(), abort();
-# endif
-    bpage->clear_oldest_modification(false);
-    bpage->set_io_fix(BUF_IO_NONE);
-    xend();
-    if (bpage->state() == BUF_BLOCK_FILE_PAGE)
-      reinterpret_cast<buf_block_t*>(bpage)->lock.u_unlock(true);
-    ut_ad(buf_pool.n_flush_list_);
-    if (UNIV_UNLIKELY(!--buf_pool.n_flush_list_))
-    {
-      mysql_mutex_lock(&buf_pool.mutex);
-      buf_pool.stat.n_pages_written++;
-      pthread_cond_broadcast(&buf_pool.done_flush_list);
-      mysql_mutex_unlock(&buf_pool.mutex);
-    }
-    else
-      inc_n_pages_written();
-    return;
-  }
-#endif
   mysql_mutex_lock(&buf_pool.mutex);
+  mysql_mutex_assert_not_owner(&buf_pool.flush_list_mutex);
   buf_pool.stat.n_pages_written++;
   /* While we do not need any mutex for clearing oldest_modification
   here, we hope that it will be in the same cache line with io_fix,
