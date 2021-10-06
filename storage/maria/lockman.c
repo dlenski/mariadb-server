@@ -189,6 +189,11 @@ static enum lockman_lock_type lock_combining_matrix[10][10]=
     but it cannot happen in row locks, only in table locks (S,X),
     or lock escalations (LS,LX)
 */
+#ifdef I
+#define _I_WAS_DEFINED
+#pragma push_macro("I")
+#undef I
+#endif
 #define I GOT_THE_LOCK_NEED_TO_LOCK_A_SUBRESOURCE
 #define L GOT_THE_LOCK_NEED_TO_INSTANT_LOCK_A_SUBRESOURCE
 #define A GOT_THE_LOCK
@@ -206,10 +211,14 @@ static enum lockman_getlock_result getlock_result[10][10]=
   {    0,   x,  0,    A,    L,   0,    x,    x,   0,    0}, /* SLX  */
   {    0,   0,  0,    L,    I,   0,    x,    0,   0,    0}  /* LSIX */
 };
-#undef I
-#undef L
-#undef A
 #undef x
+#undef A
+#undef L
+#ifdef _I_WAS_DEFINED
+#pragma pop_macro("I")
+#else
+#undef I
+#endif
 
 typedef struct lockman_lock {
   uint64 resource;
