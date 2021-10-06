@@ -226,7 +226,7 @@ public:
   void wr_lock()
   {
     writer.wr_lock();
-#if defined __i386__||defined __x86_64__||defined _M_IX86||defined _M_IX64
+# if defined __i386__||defined __x86_64__||defined _M_IX86||defined _M_IX64
     /* On IA-32 and AMD64, this type of fetch_or() can only be implemented
     as a loop around LOCK CMPXCHG. In this particular case, setting the
     most significant bit using fetch_add() is equivalent, and is
@@ -234,10 +234,10 @@ public:
     static_assert(WRITER == 1U << 31, "compatibility");
     if (uint32_t lk= readers.fetch_add(WRITER, std::memory_order_acquire))
       wr_wait(lk);
-#else
+# else
     if (uint32_t lk= readers.fetch_or(WRITER, std::memory_order_acquire))
       wr_wait(lk);
-#endif
+# endif
   }
 
   void u_wr_upgrade()
@@ -276,6 +276,16 @@ public:
     readers.store(0, std::memory_order_release);
     writer.wr_unlock();
   }
+
+  /** @return whether any lock may be held by any thread */
+  bool is_locked_or_waiting() const noexcept
+  {
+    return readers.load(std::memory_order_acquire) & WRITER ||
+      writer.is_locked_or_waiting();
+  }
+  /** @return whether an exclusive lock may be held by any thread */
+  bool is_locked() const noexcept
+  { return readers.load(std::memory_order_acquire) == WRITER; }
 #endif
 };
 
@@ -308,6 +318,17 @@ public:
   { return IF_WIN(TryAcquireSRWLockExclusive(&lock), !rw_trywrlock(&lock)); }
   void wr_unlock()
   { IF_WIN(ReleaseSRWLockExclusive(&lock), rw_unlock(&lock)); }
+#ifdef _WIN32
+  /** @return whether any lock may be held by any thread */
+  bool is_locked_or_waiting() const noexcept
+  { return *reinterpret_cast<size_t*>(&lock) != 0; }
+  /** @return whether an exclusive lock may be held by any thread */
+  bool is_locked() const noexcept
+  {
+    // FIXME: this returns false positives for shared locks
+    return is_locked_or_waiting();
+  }
+#endif
 };
 
 template<> void srw_lock_<true>::rd_wait();
@@ -476,6 +497,10 @@ public:
   }
   bool rd_lock_try() { return lock.rd_lock_try(); }
   bool wr_lock_try() { return lock.wr_lock_try(); }
+#ifndef SUX_LOCK_GENERIC
+  /** @return whether an exclusive lock may be held by any thread */
+  bool is_locked() const noexcept { return lock.is_locked(); }
+#endif
 };
 
 typedef srw_lock_impl<false> srw_lock;

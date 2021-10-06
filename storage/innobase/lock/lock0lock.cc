@@ -193,19 +193,49 @@ void lock_sys_t::assert_locked(const hash_cell_t &cell) const
 }
 #endif
 
+TRANSACTIONAL_TARGET
 LockGuard::LockGuard(lock_sys_t::hash_table &hash, page_id_t id)
 {
   const auto id_fold= id.fold();
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  if (xbegin())
+  {
+    if (lock_sys.latch.is_locked())
+      xabort<0xff>();
+    cell_= hash.cell_get(id_fold);
+    if (hash.latch(cell_)->is_locked())
+      xabort<0xff>();
+    elided= true;
+    return;
+  }
+  elided= false;
+#endif
   lock_sys.rd_lock(SRW_LOCK_CALL);
   cell_= hash.cell_get(id_fold);
   hash.latch(cell_)->acquire();
 }
 
+TRANSACTIONAL_TARGET
 LockMultiGuard::LockMultiGuard(lock_sys_t::hash_table &hash,
                                const page_id_t id1, const page_id_t id2)
 {
   ut_ad(id1.space() == id2.space());
   const auto id1_fold= id1.fold(), id2_fold= id2.fold();
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  if (xbegin())
+  {
+    if (lock_sys.latch.is_locked())
+      xabort<0xff>();
+    cell1_= hash.cell_get(id1_fold);
+    cell2_= hash.cell_get(id2_fold);
+    if (hash.latch(cell1_)->is_locked() || hash.latch(cell2_)->is_locked())
+      xabort<0xff>();
+    elided= true;
+    return;
+  }
+  elided= false;
+#endif
+
   lock_sys.rd_lock(SRW_LOCK_CALL);
   cell1_= hash.cell_get(id1_fold);
   cell2_= hash.cell_get(id2_fold);
@@ -218,8 +248,16 @@ LockMultiGuard::LockMultiGuard(lock_sys_t::hash_table &hash,
     latch2->acquire();
 }
 
+TRANSACTIONAL_TARGET
 LockMultiGuard::~LockMultiGuard()
 {
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  if (elided)
+  {
+    xend();
+    return;
+  }
+#endif
   auto latch1= lock_sys_t::hash_table::latch(cell1_),
     latch2= lock_sys_t::hash_table::latch(cell2_);
   latch1->release();
@@ -1449,6 +1487,7 @@ which does NOT look at implicit locks! Checks lock compatibility within
 explicit locks. This function sets a normal next-key lock, or in the case
 of a page supremum record, a gap type lock.
 @return DB_SUCCESS, DB_SUCCESS_LOCKED_REC, DB_LOCK_WAIT, or DB_DEADLOCK */
+TRANSACTIONAL_TARGET
 static
 dberr_t
 lock_rec_lock(
@@ -2129,6 +2168,7 @@ lock_rec_inherit_to_gap(
 Makes a record to inherit the gap locks (except LOCK_INSERT_INTENTION type)
 of another record as gap type locks, but does not reset the lock bits of the
 other record. Also waiting lock requests are inherited as GRANTED gap locks. */
+TRANSACTIONAL_TARGET
 static
 void
 lock_rec_inherit_to_gap_if_gap_lock(
@@ -2243,6 +2283,7 @@ Updates the lock table when we have reorganized a page. NOTE: we copy
 also the locks set on the infimum of the page; the infimum may carry
 locks if an update of a record is occurring on the page, and its locks
 were temporarily stored on the infimum. */
+TRANSACTIONAL_TARGET
 void
 lock_move_reorganize_page(
 /*======================*/
@@ -2999,6 +3040,7 @@ lock_update_insert(
 
 /*************************************************************//**
 Updates the lock table when a record is removed. */
+TRANSACTIONAL_TARGET
 void
 lock_update_delete(
 /*===============*/
@@ -3043,6 +3085,7 @@ updated and the size of the record changes in the update. The record
 is moved in such an update, perhaps to another page. The infimum record
 acts as a dummy carrier record, taking care of lock releases while the
 actual record is being moved. */
+TRANSACTIONAL_TARGET
 void
 lock_rec_store_on_page_infimum(
 /*===========================*/
@@ -3650,6 +3693,7 @@ dberr_t lock_sys_tables(trx_t *trx)
 Removes a granted record lock of a transaction from the queue and grants
 locks to other transactions waiting in the queue if they now are entitled
 to a lock. */
+TRANSACTIONAL_TARGET
 void
 lock_rec_unlock(
 /*============*/
@@ -4526,6 +4570,7 @@ func_exit:
 @param block    buffer pool block
 @param latched  whether the tablespace latch may be held
 @return true if ok */
+TRANSACTIONAL_TARGET
 static bool lock_rec_validate_page(const buf_block_t *block, bool latched)
 {
 	const lock_t*	lock;
@@ -4735,6 +4780,7 @@ be suspended for some reason; if not, then puts the transaction and
 the query thread to the lock wait state and inserts a waiting request
 for a gap x-lock to the lock queue.
 @return DB_SUCCESS, DB_LOCK_WAIT, or DB_DEADLOCK */
+TRANSACTIONAL_TARGET
 dberr_t
 lock_rec_insert_check_and_lock(
 /*===========================*/
@@ -4843,6 +4889,7 @@ Creates an explicit record lock for a running transaction that currently only
 has an implicit lock on the record. The transaction instance must have a
 reference count > 0 so that it can't be committed and freed before this
 function has completed. */
+TRANSACTIONAL_TARGET
 static
 void
 lock_rec_convert_impl_to_expl_for_trx(
@@ -4925,7 +4972,7 @@ static my_bool lock_rec_other_trx_holds_expl_callback(
   @param[in]  rec         user record
   @param[in]  id          page identifier
 */
-
+TRANSACTIONAL_TARGET
 static void lock_rec_other_trx_holds_expl(trx_t *caller_trx, trx_t *trx,
                                           const rec_t *rec,
                                           const page_id_t id)
@@ -5760,6 +5807,7 @@ lock_trx_has_sys_table_locks(
 @param[in]	id	leaf page identifier
 @param[in]	heap_no	heap number identifying the record
 @return whether an explicit X-lock is held */
+TRANSACTIONAL_TARGET
 bool lock_trx_has_expl_x_lock(const trx_t &trx, const dict_table_t &table,
                               page_id_t id, ulint heap_no)
 {

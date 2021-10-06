@@ -485,6 +485,7 @@ create:
 Checks if locks of other transactions prevent an immediate insert of
 a predicate record.
 @return	DB_SUCCESS, DB_LOCK_WAIT, or DB_DEADLOCK */
+TRANSACTIONAL_TARGET
 dberr_t
 lock_prdt_insert_check_and_lock(
 /*============================*/
@@ -692,6 +693,7 @@ lock_init_prdt_from_mbr(
 /*********************************************************************//**
 Acquire a predicate lock on a block
 @return	DB_SUCCESS, DB_LOCK_WAIT, or DB_DEADLOCK */
+TRANSACTIONAL_TARGET
 dberr_t
 lock_prdt_lock(
 /*===========*/
@@ -797,6 +799,7 @@ lock_prdt_lock(
 /*********************************************************************//**
 Acquire a "Page" lock on a block
 @return	DB_SUCCESS, DB_LOCK_WAIT, or DB_DEADLOCK */
+TRANSACTIONAL_TARGET
 dberr_t
 lock_place_prdt_page_lock(
 	const page_id_t	page_id,	/*!< in: page identifier */
@@ -849,6 +852,7 @@ lock_place_prdt_page_lock(
 @param[in]	trx	trx to test the lock
 @param[in]	page_id	page identifier
 @return	true if there is none */
+TRANSACTIONAL_TARGET
 bool lock_test_prdt_page_lock(const trx_t *trx, const page_id_t page_id)
 {
   LockGuard g{lock_sys.prdt_page_hash, page_id};

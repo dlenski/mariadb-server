@@ -38,6 +38,7 @@ Created 5/7/1996 Heikki Tuuri
 #include "ut0vec.h"
 #include "gis0rtree.h"
 #include "lock0prdt.h"
+#include "transactional_lock_guard.h"
 
 // Forward declaration
 class ReadView;
@@ -581,6 +582,11 @@ class lock_sys_t
     void acquire() { if (!try_acquire()) wait(); }
     /** Release a lock */
     void release();
+# ifdef UNIV_DEBUG
+    /** @return whether this latch is possibly held by any thread */
+    bool is_locked() const
+    { return memcmp(this, field_ref_zero, sizeof *this); }
+# endif
 #else
   {
   private:
@@ -592,11 +598,8 @@ class lock_sys_t
     void acquire() { lock.wr_lock(); }
     /** Release a lock */
     void release() { lock.wr_unlock(); }
-#endif
-#ifdef UNIV_DEBUG
     /** @return whether this latch is possibly held by any thread */
-    bool is_locked() const
-    { return memcmp(this, field_ref_zero, sizeof *this); }
+    bool is_locked() const noexcept { return lock.is_locked(); }
 #endif
   };
 
@@ -945,9 +948,17 @@ struct LockMutexGuard
 /** lock_sys latch guard for 1 page_id_t */
 struct LockGuard
 {
+  TRANSACTIONAL_TARGET
   LockGuard(lock_sys_t::hash_table &hash, const page_id_t id);
-  ~LockGuard()
+  TRANSACTIONAL_INLINE ~LockGuard()
   {
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+    if (elided)
+    {
+      xend();
+      return;
+    }
+#endif
     lock_sys_t::hash_table::latch(cell_)->release();
     /* Must be last, to avoid a race with lock_sys_t::hash_table::resize() */
     lock_sys.rd_unlock();
@@ -957,14 +968,19 @@ struct LockGuard
 private:
   /** The hash array cell */
   hash_cell_t *cell_;
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  /** whether the latches were elided */
+  bool elided;
+#endif
 };
 
 /** lock_sys latch guard for 2 page_id_t */
 struct LockMultiGuard
 {
+  TRANSACTIONAL_TARGET
   LockMultiGuard(lock_sys_t::hash_table &hash,
                  const page_id_t id1, const page_id_t id2);
-  ~LockMultiGuard();
+  TRANSACTIONAL_TARGET ~LockMultiGuard();
 
   /** @return the first hash array cell */
   hash_cell_t &cell1() const { return *cell1_; }
@@ -975,6 +991,10 @@ private:
   hash_cell_t *cell1_;
   /** The second hash array cell */
   hash_cell_t *cell2_;
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  /** whether the latches were elided */
+  bool elided;
+#endif
 };
 
 /*********************************************************************//**
