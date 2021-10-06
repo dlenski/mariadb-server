@@ -383,13 +383,11 @@ void buf_page_write_complete(const IORequest &request)
 # endif
     bpage->clear_oldest_modification(false);
     bpage->set_io_fix(BUF_IO_NONE);
-    const auto state= bpage->state();
     xend();
-    const auto l= buf_pool.n_flush_list_--;
-    ut_ad(l);
-    if (state == BUF_BLOCK_FILE_PAGE)
+    if (bpage->state() == BUF_BLOCK_FILE_PAGE)
       reinterpret_cast<buf_block_t*>(bpage)->lock.u_unlock(true);
-    if (UNIV_UNLIKELY(l == 1))
+    ut_ad(buf_pool.n_flush_list_);
+    if (UNIV_UNLIKELY(!--buf_pool.n_flush_list_))
     {
       mysql_mutex_lock(&buf_pool.mutex);
       buf_pool.stat.n_pages_written++;
