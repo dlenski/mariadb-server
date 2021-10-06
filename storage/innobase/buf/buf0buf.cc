@@ -2190,7 +2190,10 @@ void buf_pool_t::watch_unset(const page_id_t id)
     ut_ad(buf_fix_count);
     ut_ad(w->in_page_hash);
     if (buf_fix_count != 1 || !watch_is_sentinel(*w))
+    {
+      w->unfix();
       w= nullptr;
+    }
   }
 
   if (const auto old= w)
