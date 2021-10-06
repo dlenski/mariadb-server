@@ -806,6 +806,8 @@ inline unsigned long long my_double2ulonglong(double d)
 
 #ifdef __cplusplus
 #include <cmath>
+#else
+#include <tgmath.h>
 #endif
 
 /* Define missing math constants. */
@@ -819,7 +821,7 @@ inline unsigned long long my_double2ulonglong(double d)
 #define M_LN2 0.69314718055994530942
 #endif
 
-#ifndef HAVE_LOG2
+#if (defined(__cplusplus) && !defined(HAVE_LOG2)) || (!defined(__cplusplus) && !defined(log2))
 /*
   This will be slightly slower and perhaps a tiny bit less accurate than
   doing it the IEEE754 way but log2() should be available on C99 systems.
@@ -1155,7 +1157,7 @@ typedef struct { const char *dli_fname, dli_fbase; } Dl_info;
 #endif
 #endif /* !defined(__func__) */
 
-#ifndef HAVE_RINT
+#if (defined(__cplusplus) && !defined(HAVE_LOG2)) || (!defined(__cplusplus) && !defined(rint))
 /**
    All integers up to this number can be represented exactly as double precision
    values (DBL_MANT_DIG == 53 for IEEE 754 hardware).
@@ -1169,7 +1171,6 @@ typedef struct { const char *dli_fname, dli_fbase; } Dl_info;
    FPU mode. Hardware-specific optimizations are possible (frndint on x86).
    Unlike this implementation, hardware will also honor the FPU rounding mode.
 */
-
 static inline double rint(double x)
 {
   double f, i;
