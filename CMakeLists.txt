@@ -28,6 +28,7 @@ IF(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 ENDIF()
 
 PROJECT(MySQL)
+SET(CMAKE_C_STANDARD 11)
 
 # explicitly set the policy to OLD
 # (cannot use NEW, not everyone is on cmake-2.8.12 yet)
