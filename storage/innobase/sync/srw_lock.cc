@@ -19,6 +19,38 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "srw_lock.h"
 #include "srv0srv.h"
 #include "my_cpu.h"
+#include "transactional_lock_guard.h"
+
+#ifndef NO_ELISION
+# if defined _MSC_VER && (defined _M_IX86 || defined _M_X64)
+#  include <intrin.h>
+bool have_transactional_memory;
+bool transactional_lock_enabled()
+{
+  int regs[4];
+  __cpuid(regs, 0);
+  if (regs[0] < 7)
+    return false;
+  __cpuidex(regs, 7, 0);
+  /* Restricted Transactional Memory (RTM) */
+  have_transactional_memory= regs[1] & 1U << 11;
+  return have_transactional_memory;
+}
+# elif defined __GNUC__ && (defined __i386__ || defined __x86_64__)
+#  include <cpuid.h>
+bool have_transactional_memory;
+bool transactional_lock_enabled()
+{
+  if (__get_cpuid_max(0, nullptr) < 7)
+    return false;
+  unsigned eax, ebx, ecx, edx;
+  __cpuid_count(7, 0, eax, ebx, ecx, edx);
+  /* Restricted Transactional Memory (RTM) */
+  have_transactional_memory= ebx & 1U << 11;
+  return have_transactional_memory;
+}
+# endif
+#endif
 
 /** @return the parameter for srw_pause() */
 static inline unsigned srw_pause_delay()

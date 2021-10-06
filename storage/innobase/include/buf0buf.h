@@ -41,6 +41,7 @@ Created 11/5/1995 Heikki Tuuri
 #include "page0types.h"
 #include "log0log.h"
 #include "srv0srv.h"
+#include "transactional_lock_guard.h"
 #include <ostream>
 
 // Forward declaration
@@ -1533,51 +1534,6 @@ public:
                 ut_ad(bpage->in_page_hash), id == bpage->id());
     return bpage;
   }
-private:
-  /** Look up a block descriptor.
-  @tparam exclusive  whether the latch is to be acquired exclusively
-  @tparam watch      whether to allow watch_is_sentinel()
-  @param page_id     page identifier
-  @param fold        page_id.fold()
-  @param hash_lock   pointer to the acquired latch (to be released by caller)
-  @return pointer to the block
-  @retval nullptr  if no block was found; !lock || !*lock will also hold */
-  template<bool exclusive,bool watch>
-  buf_page_t *page_hash_get_locked(const page_id_t page_id, ulint fold,
-                                   page_hash_latch **hash_lock)
-  {
-    ut_ad(hash_lock || !exclusive);
-    page_hash_latch *latch= page_hash.lock<exclusive>(fold);
-    buf_page_t *bpage= page_hash_get_low(page_id, fold);
-    if (!bpage || watch_is_sentinel(*bpage))
-    {
-      latch->release<exclusive>();
-      if (hash_lock)
-        *hash_lock= nullptr;
-      return watch ? bpage : nullptr;
-    }
-
-    ut_ad(bpage->in_file());
-    ut_ad(page_id == bpage->id());
-
-    if (hash_lock)
-      *hash_lock= latch; /* to be released by the caller */
-    else
-      latch->release<exclusive>();
-    return bpage;
-  }
-public:
-  /** Look up a block descriptor.
-  @tparam exclusive  whether the latch is to be acquired exclusively
-  @param page_id     page identifier
-  @param fold        page_id.fold()
-  @param hash_lock   pointer to the acquired latch (to be released by caller)
-  @return pointer to the block
-  @retval nullptr  if no block was found; !lock || !*lock will also hold */
-  template<bool exclusive>
-  buf_page_t *page_hash_get_locked(const page_id_t page_id, ulint fold,
-                                   page_hash_latch **hash_lock)
-  { return page_hash_get_locked<exclusive,false>(page_id, fold, hash_lock); }
 
   /** @return whether the buffer pool contains a page
   @tparam watch      whether to allow watch_is_sentinel()
@@ -1585,7 +1541,11 @@ public:
   template<bool watch= false>
   bool page_hash_contains(const page_id_t page_id)
   {
-    return page_hash_get_locked<false,watch>(page_id, page_id.fold(), nullptr);
+    const auto fold= page_id.fold();
+    transactional_shared_lock_guard<page_hash_latch> g
+      {*page_hash.lock_get(fold)};
+    buf_page_t *bpage= page_hash_get_low(page_id, fold);
+    return bpage && !watch_is_sentinel(*bpage);
   }
 
   /** Determine if a block is a sentinel for a buffer pool watch.
@@ -1618,11 +1578,11 @@ public:
   bool watch_occurred(const page_id_t id)
   {
     const ulint fold= id.fold();
-    page_hash_latch *hash_lock= page_hash.lock<false>(fold);
+    transactional_shared_lock_guard<page_hash_latch> g
+      {*page_hash.lock_get(fold)};
     /* The page must exist because watch_set() increments buf_fix_count. */
     buf_page_t *bpage= page_hash_get_low(id, fold);
     const bool is_sentinel= watch_is_sentinel(*bpage);
-    hash_lock->read_unlock();
     return !is_sentinel;
   }
 
@@ -1778,16 +1738,6 @@ public:
     /** Get a page_hash latch. */
     page_hash_latch *lock_get(ulint fold) const
     { return lock_get(fold, n_cells); }
-
-    /** Acquire an array latch.
-    @tparam exclusive  whether the latch is to be acquired exclusively
-    @param fold    hash bucket key */
-    template<bool exclusive> page_hash_latch *lock(ulint fold)
-    {
-      page_hash_latch *latch= lock_get(fold, n_cells);
-      latch->acquire<exclusive>();
-      return latch;
-    }
 
     /** Exclusively aqcuire all latches */
     inline void write_lock_all();
@@ -2024,14 +1974,14 @@ private:
 /** The InnoDB buffer pool */
 extern buf_pool_t buf_pool;
 
-inline void page_hash_latch::read_lock()
+inline void page_hash_latch::lock_shared()
 {
   mysql_mutex_assert_not_owner(&buf_pool.mutex);
   if (!read_trylock())
     read_lock_wait();
 }
 
-inline void page_hash_latch::write_lock()
+inline void page_hash_latch::lock()
 {
   if (!write_trylock())
     write_lock_wait();

@@ -1007,6 +1007,7 @@ both have sensible values.
 				or NULL
 @param[in]	mtr		mini transaction
 @return whether the search succeeded */
+TRANSACTIONAL_TARGET
 bool
 btr_search_guess_on_hash(
 	dict_index_t*	index,
@@ -1090,26 +1091,35 @@ fail:
 	buf_block_t* block = buf_pool.block_from_ahi(rec);
 
 	if (!ahi_latch) {
-		page_hash_latch* hash_lock = buf_pool.hash_lock_get(
-			block->page.id());
-		hash_lock->read_lock();
+		bool fail;
+		{
+			transactional_shared_lock_guard<page_hash_latch> g
+				{*buf_pool.hash_lock_get(block->page.id())};
 
-		if (block->page.state() == BUF_BLOCK_REMOVE_HASH) {
-			/* Another thread is just freeing the block
-			from the LRU list of the buffer pool: do not
-			try to access this page. */
-			hash_lock->read_unlock();
-			goto fail;
+			switch (block->page.state()) {
+			case BUF_BLOCK_REMOVE_HASH:
+				/* Another thread is just freeing the block
+				from the LRU list of the buffer pool: do not
+				try to access this page. */
+				goto fail;
+			case BUF_BLOCK_FILE_PAGE:
+				break;
+			default:
+#ifndef NO_ELISION
+				xend();
+#endif
+				ut_error;
+			}
+
+			fail = index != block->index
+				&& index_id == block->index->id;
+			ut_a(!fail || block->index->freed());
+			DBUG_ASSERT(fail
+				    || block->page.status != buf_page_t::FREED);
+
+			buf_block_buf_fix_inc(block);
 		}
 
-		const bool fail = index != block->index
-			&& index_id == block->index->id;
-		ut_a(!fail || block->index->freed());
-		ut_ad(block->page.state() == BUF_BLOCK_FILE_PAGE);
-		DBUG_ASSERT(fail || block->page.status != buf_page_t::FREED);
-
-		buf_block_buf_fix_inc(block);
-		hash_lock->read_unlock();
 		block->page.set_accessed();
 
 		buf_page_make_young_if_needed(&block->page);

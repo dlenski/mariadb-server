@@ -60,10 +60,10 @@ class srw_mutex_impl final
 public:
   /** @return whether the mutex is being held or waited for */
   bool is_locked_or_waiting() const
-  { return lock.load(std::memory_order_relaxed) != 0; }
+  { return lock.load(std::memory_order_acquire) != 0; }
   /** @return whether the mutex is being held by any thread */
   bool is_locked() const
-  { return (lock.load(std::memory_order_relaxed) & HOLDER) != 0; }
+  { return (lock.load(std::memory_order_acquire) & HOLDER) != 0; }
 
   void init() { DBUG_ASSERT(!is_locked_or_waiting()); }
   void destroy() { DBUG_ASSERT(!is_locked_or_waiting()); }

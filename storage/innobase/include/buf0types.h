@@ -178,7 +178,7 @@ enum rw_lock_type_t
 
 #include "sux_lock.h"
 
-class page_hash_latch : public rw_lock
+class page_hash_latch : private rw_lock
 {
 public:
   /** Wait for a shared lock */
@@ -187,25 +187,40 @@ public:
   void write_lock_wait();
 
   /** Acquire a shared lock */
-  inline void read_lock();
+  inline void lock_shared();
   /** Acquire an exclusive lock */
-  inline void write_lock();
+  inline void lock();
+
+#ifdef UNIV_DEBUG
+  /** @return whether an exclusive lock is being held by any thread */
+  bool is_write_locked() const { return rw_lock::is_write_locked(); }
+#endif
+
+  /** @return whether any lock is being held by any thread */
+  bool is_locked() const { return rw_lock::is_locked(); }
+  /** @return whether any lock is being held or waited for by any thread */
+  bool is_locked_or_waiting() const { return rw_lock::is_locked_or_waiting(); }
+
+  /** Release a shared lock */
+  void unlock_shared() { read_unlock(); }
+  /** Release an exclusive lock */
+  void unlock() { write_unlock(); }
 
   /** Acquire a lock */
   template<bool exclusive> void acquire()
   {
     if (exclusive)
-      write_lock();
+      lock();
     else
-      read_lock();
+      lock_shared();
   }
   /** Release a lock */
   template<bool exclusive> void release()
   {
     if (exclusive)
-      write_unlock();
+      unlock();
     else
-      read_unlock();
+      unlock_shared();
   }
 };
 
