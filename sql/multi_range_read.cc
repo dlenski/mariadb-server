@@ -284,11 +284,15 @@ handler::multi_range_read_info_const(uint keyno, RANGE_SEQ_IF *seq,
     (single_point_ranges - assigned_single_point_ranges).
 
     We don't add these to io_blocks as we don't want to penalize equal
-    readss (if we did, a range that would read 5 rows would be
+    reads (if we did, a range that would read 5 rows would be
     regarded as better than one equal read).
 
     Better to assume we have done a records_in_range() for the equal
     range and it's also cached.
+
+    One effect of this is that io_blocks for simple ranges are often 0,
+    as the blocks where already read by records_in_range and we assume
+    that we don't have to read it again.
   */
   io_blocks= (range_blocks_cnt - edge_blocks_cnt);
   unassigned_single_point_ranges+= (single_point_ranges -
