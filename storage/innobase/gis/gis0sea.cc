@@ -78,6 +78,7 @@ rtr_adjust_parent_path(
 Find the next matching record. This function is used by search
 or record locating during index delete/update.
 @return true if there is suitable record found, otherwise false */
+TRANSACTIONAL_TARGET
 static
 bool
 rtr_pcur_getnext_from_path(

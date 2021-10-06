@@ -695,6 +695,7 @@ row_ins_set_detailed(
 Acquires dict_foreign_err_mutex, rewinds dict_foreign_err_file
 and displays information about the given transaction.
 The caller must release dict_foreign_err_mutex. */
+TRANSACTIONAL_TARGET
 static
 void
 row_ins_foreign_trx_print(

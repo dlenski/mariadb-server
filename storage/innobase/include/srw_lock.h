@@ -167,19 +167,11 @@ public:
   /** Acquire a read lock */
   void rd_wait();
 public:
-  void init() { DBUG_ASSERT(is_vacant()); }
-  void destroy() { DBUG_ASSERT(is_vacant()); }
+  void init() { DBUG_ASSERT(!is_locked_or_waiting()); }
+  void destroy() { DBUG_ASSERT(!is_locked_or_waiting()); }
   /** @return whether any writer is waiting */
   bool is_waiting() const
   { return (readers.load(std::memory_order_relaxed) & WRITER) != 0; }
-# ifndef DBUG_OFF
-  /** @return whether the lock is being held or waited for */
-  bool is_vacant() const
-  {
-    return !readers.load(std::memory_order_relaxed) &&
-      !writer.is_locked_or_waiting();
-  }
-# endif /* !DBUG_OFF */
 
   bool rd_lock_try()
   {
@@ -498,6 +490,9 @@ public:
   bool rd_lock_try() { return lock.rd_lock_try(); }
   bool wr_lock_try() { return lock.wr_lock_try(); }
 #ifndef SUX_LOCK_GENERIC
+  /** @return whether any lock may be held by any thread */
+  bool is_locked_or_waiting() const noexcept
+  { return lock.is_locked_or_waiting(); }
   /** @return whether an exclusive lock may be held by any thread */
   bool is_locked() const noexcept { return lock.is_locked(); }
 #endif

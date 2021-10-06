@@ -403,6 +403,7 @@ i_s_locks_row_validate(
 Fills i_s_trx_row_t object.
 If memory can not be allocated then FALSE is returned.
 @return FALSE if allocation fails */
+TRANSACTIONAL_TARGET
 static
 ibool
 fill_trx_row(
@@ -1037,6 +1038,7 @@ requested_lock_row, otherwise requested_lock_row is set to NULL.
 If rows can not be allocated then FALSE is returned and the value of
 requested_lock_row is undefined.
 @return FALSE if allocation fails */
+TRANSACTIONAL_TARGET
 static
 ibool
 add_trx_relevant_locks_to_cache(
@@ -1205,6 +1207,7 @@ static void fetch_data_into_cache_low(trx_i_s_cache_t *cache, const trx_t *trx)
   table cache buffer. Cache must be locked for write.
 */
 
+TRANSACTIONAL_TARGET
 static void fetch_data_into_cache(trx_i_s_cache_t *cache)
 {
   LockMutexGuard g{SRW_LOCK_CALL};

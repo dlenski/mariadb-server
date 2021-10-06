@@ -1750,6 +1750,7 @@ state_ok:
 Prints info about a transaction.
 The caller must hold lock_sys.latch.
 When possible, use trx_print() instead. */
+TRANSACTIONAL_TARGET
 void
 trx_print_latched(
 /*==============*/
@@ -1769,6 +1770,7 @@ trx_print_latched(
 /**********************************************************************//**
 Prints info about a transaction.
 Acquires and releases lock_sys.latch. */
+TRANSACTIONAL_TARGET
 void
 trx_print(
 /*======*/

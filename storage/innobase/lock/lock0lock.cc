@@ -83,6 +83,7 @@ void lock_sys_t::hash_table::create(ulint n)
 
 /** Resize the hash table.
 @param n  the lower bound of n_cells */
+TRANSACTIONAL_TARGET
 void lock_sys_t::hash_table::resize(ulint n)
 {
   ut_ad(lock_sys.is_writer());
@@ -150,6 +151,7 @@ void lock_sys_t::hash_latch::release()
 
 #ifdef UNIV_DEBUG
 /** Assert that a lock shard is exclusively latched by this thread */
+TRANSACTIONAL_TARGET
 void lock_sys_t::assert_locked(const lock_t &lock) const
 {
   ut_ad(this == &lock_sys);
@@ -163,18 +165,18 @@ void lock_sys_t::assert_locked(const lock_t &lock) const
 }
 
 /** Assert that a table lock shard is exclusively latched by this thread */
+TRANSACTIONAL_TARGET
 void lock_sys_t::assert_locked(const dict_table_t &table) const
 {
   ut_ad(!table.is_temporary());
-
-  const os_thread_id_t current_thread= os_thread_get_curr_id();
-  if (writer.load(std::memory_order_relaxed) == current_thread)
+  if (is_writer())
     return;
   ut_ad(readers);
   ut_ad(table.lock_mutex_is_owner());
 }
 
 /** Assert that hash cell for page is exclusively latched by this thread */
+TRANSACTIONAL_TARGET
 void lock_sys_t::hash_table::assert_locked(const page_id_t id) const
 {
   if (lock_sys.is_writer())
@@ -184,9 +186,10 @@ void lock_sys_t::hash_table::assert_locked(const page_id_t id) const
 }
 
 /** Assert that a hash table cell is exclusively latched (by some thread) */
+TRANSACTIONAL_TARGET
 void lock_sys_t::assert_locked(const hash_cell_t &cell) const
 {
-  if (lock_sys.is_writer())
+  if (is_writer())
     return;
   ut_ad(lock_sys.readers);
   ut_ad(hash_table::latch(const_cast<hash_cell_t*>(&cell))->is_locked());
@@ -465,6 +468,7 @@ void lock_sys_t::rd_unlock()
 
   @param[in] n_cells number of slots in lock hash table
 */
+TRANSACTIONAL_TARGET
 void lock_sys_t::resize(ulint n_cells)
 {
   ut_ad(this == &lock_sys);
@@ -829,6 +833,7 @@ lock_rec_copy(
 /*********************************************************************//**
 Gets the previous record lock set on a record.
 @return previous lock on the same record, NULL if none exists */
+TRANSACTIONAL_TARGET
 const lock_t*
 lock_rec_get_prev(
 /*==============*/
@@ -931,7 +936,8 @@ void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id);
 
 /** Kill the holders of conflicting locks.
 @param trx   brute-force applier transaction running in the current thread */
-ATTRIBUTE_COLD ATTRIBUTE_NOINLINE static void lock_wait_wsrep(trx_t *trx)
+TRANSACTIONAL_TARGET ATTRIBUTE_COLD ATTRIBUTE_NOINLINE
+static void lock_wait_wsrep(trx_t *trx)
 {
   DBUG_ASSERT(wsrep_on(trx->mysql_thd));
   if (!wsrep_thd_is_BF(trx->mysql_thd, false))
@@ -1048,6 +1054,7 @@ index.
 NOTE that this function can return false positives but never false
 negatives. The caller must confirm all positive results by calling
 trx_is_active(). */
+TRANSACTIONAL_TARGET
 static
 trx_t*
 lock_sec_rec_some_has_impl(
@@ -1095,6 +1102,7 @@ lock_sec_rec_some_has_impl(
 /*********************************************************************//**
 Return the number of table locks for a transaction.
 The caller must be holding lock_sys.latch. */
+TRANSACTIONAL_TARGET
 ulint
 lock_number_of_tables_locked(
 /*=========================*/
@@ -1159,6 +1167,7 @@ without checking for deadlocks or conflicts.
 @param[in,out]	trx		transaction
 @param[in]	holds_trx_mutex	whether the caller holds trx->mutex
 @return created lock */
+TRANSACTIONAL_TARGET
 lock_t*
 lock_rec_create_low(
 	lock_t*		c_lock,
@@ -1369,6 +1378,7 @@ can reuse a suitable record lock object already existing on the same page,
 just setting the appropriate bit in its bitmap. This is a low-level function
 which does NOT check for deadlocks or lock compatibility!
 @return lock where the bit was set */
+TRANSACTIONAL_TARGET
 static
 void
 lock_rec_add_to_queue(
@@ -1662,7 +1672,7 @@ void lock_sys_t::wait_resume(THD *thd, my_hrtime_t start, my_hrtime_t now)
 }
 
 #ifdef HAVE_REPLICATION
-ATTRIBUTE_NOINLINE MY_ATTRIBUTE((nonnull))
+ATTRIBUTE_NOINLINE TRANSACTIONAL_TARGET MY_ATTRIBUTE((nonnull))
 /** Report lock waits to parallel replication.
 @param trx       transaction that may be waiting for a lock
 @param wait_lock lock that is being waited for */
@@ -1676,6 +1686,9 @@ static void lock_wait_rpl_report(trx_t *trx)
   if (!wait_lock)
     return;
   ut_ad(!(wait_lock->type_mode & LOCK_AUTO_INC));
+#ifdef NO_ELISION
+  // FIXME
+#endif
   if (!lock_sys.wr_lock_try())
   {
     mysql_mutex_unlock(&lock_sys.wait_mutex);
@@ -1935,6 +1948,7 @@ static void lock_grant(lock_t *lock)
 Cancels a waiting record lock request and releases the waiting transaction
 that requested it. NOTE: does NOT check if waiting lock requests behind this
 one can now be granted! */
+TRANSACTIONAL_TARGET
 static void lock_rec_cancel(lock_t *lock)
 {
   trx_t *trx= lock->trx;
@@ -1960,6 +1974,7 @@ grant locks to other transactions in the queue if they now are entitled
 to a lock. NOTE: all record locks contained in in_lock are removed.
 @param[in,out]	in_lock		record lock
 @param[in]	owns_wait_mutex	whether lock_sys.wait_mutex is held */
+TRANSACTIONAL_TARGET
 static void lock_rec_dequeue_from_page(lock_t *in_lock, bool owns_wait_mutex)
 {
 #ifdef SAFE_MUTEX
@@ -2032,6 +2047,7 @@ static void lock_rec_dequeue_from_page(lock_t *in_lock, bool owns_wait_mutex)
 /** Remove a record lock request, waiting or granted, on a discarded page
 @param hash     hash table
 @param in_lock  lock object */
+TRANSACTIONAL_TARGET
 void lock_rec_discard(lock_sys_t::hash_table &lock_hash, lock_t *in_lock)
 {
   ut_ad(!in_lock->is_table());
@@ -2070,10 +2086,11 @@ lock_rec_free_all_from_discard_page(page_id_t id, const hash_cell_t &cell,
 }
 
 /** Discard locks for an index */
+TRANSACTIONAL_TARGET
 void lock_discard_for_index(const dict_index_t &index)
 {
   ut_ad(!index.is_committed());
-  lock_sys.wr_lock(SRW_LOCK_CALL);
+  LockMutexGuard(SRW_LOCK_CALL);
   const ulint n= lock_sys.rec_hash.pad(lock_sys.rec_hash.n_cells);
   for (ulint i= 0; i < n; i++)
   {
@@ -2091,7 +2108,6 @@ void lock_discard_for_index(const dict_index_t &index)
         lock= lock->hash;
     }
   }
-  lock_sys.wr_unlock();
 }
 
 /*============= RECORD LOCK MOVING AND INHERITING ===================*/
@@ -2099,6 +2115,7 @@ void lock_discard_for_index(const dict_index_t &index)
 /*************************************************************//**
 Resets the lock bits for a single record. Releases transactions waiting for
 lock requests here. */
+TRANSACTIONAL_TARGET
 static
 void
 lock_rec_reset_and_release_wait(const hash_cell_t &cell, const page_id_t id,
@@ -2197,6 +2214,7 @@ lock_rec_inherit_to_gap_if_gap_lock(
 /*************************************************************//**
 Moves the locks of a record to another record and resets the lock bits of
 the donating record. */
+TRANSACTIONAL_TARGET
 static
 void
 lock_rec_move(
@@ -2430,6 +2448,7 @@ lock_move_reorganize_page(
 /*************************************************************//**
 Moves the explicit locks on user records to another page if a record
 list end is moved to another page. */
+TRANSACTIONAL_TARGET
 void
 lock_move_rec_list_end(
 /*===================*/
@@ -2545,6 +2564,7 @@ lock_move_rec_list_end(
 /*************************************************************//**
 Moves the explicit locks on user records to another page if a record
 list start is moved to another page. */
+TRANSACTIONAL_TARGET
 void
 lock_move_rec_list_start(
 /*=====================*/
@@ -2657,6 +2677,7 @@ lock_move_rec_list_start(
 /*************************************************************//**
 Moves the explicit locks on user records to another page if a record
 list start is moved to another page. */
+TRANSACTIONAL_TARGET
 void
 lock_rtr_move_rec_list(
 /*===================*/
@@ -2768,6 +2789,7 @@ lock_update_split_right(
 }
 
 #ifdef UNIV_DEBUG
+TRANSACTIONAL_TARGET
 static void lock_assert_no_spatial(const page_id_t id)
 {
   const auto id_fold= id.fold();
@@ -2932,6 +2954,7 @@ lock_rec_reset_and_inherit_gap_locks(
 
 /*************************************************************//**
 Updates the lock table when a page is discarded. */
+TRANSACTIONAL_TARGET
 void
 lock_update_discard(
 /*================*/
@@ -3131,6 +3154,7 @@ Create a table lock, without checking for deadlocks or lock compatibility.
 @param trx        transaction
 @param c_lock     conflicting lock
 @return the created lock object */
+TRANSACTIONAL_TARGET
 lock_t *lock_table_create(dict_table_t *table, unsigned type_mode, trx_t *trx,
                           lock_t *c_lock)
 {
@@ -3426,6 +3450,7 @@ lock_table_other_has_incompatible(
 Locks the specified database table in the mode given. If the lock cannot
 be granted immediately, the query thread is put to wait.
 @return DB_SUCCESS, DB_LOCK_WAIT, or DB_DEADLOCK */
+TRANSACTIONAL_TARGET
 dberr_t
 lock_table(
 /*=======*/
@@ -3467,6 +3492,9 @@ lock_table(
 
 	err = DB_SUCCESS;
 
+#ifndef NO_ELISION
+	// FIXME
+#endif
 #ifdef WITH_WSREP
 	if (trx->is_wsrep()) {
 		lock_sys.wr_lock(SRW_LOCK_CALL);
@@ -3511,6 +3539,7 @@ lock_table(
 @param table    table to be X-locked
 @param trx      transaction
 @param mode     LOCK_X or LOCK_IX */
+TRANSACTIONAL_TARGET
 void lock_table_resurrect(dict_table_t *table, trx_t *trx, lock_mode mode)
 {
   ut_ad(trx->is_recovered);
@@ -3774,7 +3803,7 @@ released:
 /** Release the explicit locks of a committing transaction,
 and release possible other transactions waiting because of these locks.
 @return whether the operation succeeded */
-static bool lock_release_try(trx_t *trx)
+TRANSACTIONAL_TARGET static bool lock_release_try(trx_t *trx)
 {
   /* At this point, trx->lock.trx_locks cannot be modified by other
   threads, because our transaction has been committed.
@@ -3790,6 +3819,10 @@ static bool lock_release_try(trx_t *trx)
   bool all_released= true;
 restart:
   ulint count= 1000;
+#ifdef NO_ELISION
+  // FIXME: try to free things in memory transactions,
+  // only attempting to free the last item in each transaction.
+#endif
   lock_sys.rd_lock(SRW_LOCK_CALL);
   trx->mutex_lock();
 
@@ -3849,6 +3882,7 @@ restart:
 
 /** Release the explicit locks of a committing transaction,
 and release possible other transactions waiting because of these locks. */
+TRANSACTIONAL_TARGET
 void lock_release(trx_t *trx)
 {
 #if defined SAFE_MUTEX && defined UNIV_DEBUG
@@ -3868,6 +3902,8 @@ void lock_release(trx_t *trx)
   /* Fall back to acquiring lock_sys.latch in exclusive mode */
 restart:
   count= 1000;
+  /* There is probably no point to try lock elision here;
+  in lock_release_try() it is different. */
   lock_sys.wr_lock(SRW_LOCK_CALL);
   trx->mutex_lock();
 
@@ -3928,10 +3964,14 @@ released:
 }
 
 /** Release locks on a table whose creation is being rolled back */
+TRANSACTIONAL_TARGET
 ATTRIBUTE_COLD void lock_release_on_rollback(trx_t *trx, dict_table_t *table)
 {
   trx->mod_tables.erase(table);
 
+#ifdef NO_ELISION
+  // FIXME: try to free locks, one per memory transaction
+#endif
   lock_sys.wr_lock(SRW_LOCK_CALL);
   trx->mutex_lock();
 
@@ -3994,6 +4034,7 @@ lock_trx_table_locks_remove(
 /** Print info of a table lock.
 @param[in,out]	file	output stream
 @param[in]	lock	table lock */
+TRANSACTIONAL_TARGET
 static
 void
 lock_table_print(FILE* file, const lock_t* lock)
@@ -4137,6 +4178,7 @@ http://bugs.mysql.com/36942 */
 /*********************************************************************//**
 Calculates the number of record lock structs in the record lock hash table.
 @return number of record locks */
+TRANSACTIONAL_TARGET
 static ulint lock_get_n_rec_locks()
 {
 	ulint	n_locks	= 0;
@@ -4164,12 +4206,16 @@ static ulint lock_get_n_rec_locks()
 /*********************************************************************//**
 Prints info of locks for all transactions.
 @return FALSE if not able to acquire lock_sys.latch (and dislay info) */
+TRANSACTIONAL_TARGET
 ibool
 lock_print_info_summary(
 /*====================*/
 	FILE*	file,	/*!< in: file where to print */
 	ibool	nowait)	/*!< in: whether to wait for lock_sys.latch */
 {
+	/* Here, lock elision does not make sense, because
+	for the output we are going to invoke system calls,
+	which would interrupt a memory transaction. */
 	if (!nowait) {
 		lock_sys.wr_lock(SRW_LOCK_CALL);
 	} else if (!lock_sys.wr_lock_try()) {
@@ -4247,6 +4293,7 @@ void lock_trx_print_wait_and_mvcc_state(FILE *file, const trx_t *trx,
 
 /*********************************************************************//**
 Prints info of locks for a transaction. */
+TRANSACTIONAL_TARGET
 static
 void
 lock_trx_print_locks(
@@ -4304,6 +4351,7 @@ struct lock_print_info
 /*********************************************************************//**
 Prints info of locks for each transaction. This function will release
 lock_sys.latch, which the caller must be holding in exclusive mode. */
+TRANSACTIONAL_TARGET
 void
 lock_print_info_all_transactions(
 /*=============================*/
@@ -4398,6 +4446,7 @@ lock_table_queue_validate(
 /*********************************************************************//**
 Validates the lock queue on a single record.
 @return TRUE if ok */
+TRANSACTIONAL_TARGET
 static
 bool
 lock_rec_queue_validate(
@@ -4652,6 +4701,7 @@ function_exit:
 /*********************************************************************//**
 Validate record locks up to a limit.
 @return lock at limit or NULL if no more locks in the hash bucket */
+TRANSACTIONAL_TARGET
 static MY_ATTRIBUTE((warn_unused_result))
 const lock_t*
 lock_rec_validate(
@@ -4726,7 +4776,7 @@ static void lock_rec_block_validate(const page_id_t page_id)
 	}
 }
 
-
+TRANSACTIONAL_TARGET
 static my_bool lock_validate_table_locks(rw_trx_hash_element_t *element, void*)
 {
   lock_sys.assert_locked();
@@ -4746,6 +4796,7 @@ static my_bool lock_validate_table_locks(rw_trx_hash_element_t *element, void*)
 
 
 /** Validate the transactional locks. */
+TRANSACTIONAL_TARGET
 static void lock_validate()
 {
   std::set<page_id_t> pages;
@@ -5013,6 +5064,7 @@ should be created.
 @param[in]	index		the index of the record
 @param[in]	offsets		rec_get_offsets(rec,index)
 @return	whether caller_trx already holds an exclusive lock on rec */
+TRANSACTIONAL_TARGET
 static
 bool
 lock_rec_convert_impl_to_expl(
@@ -5446,6 +5498,7 @@ lock_trx_holds_autoinc_locks(
 }
 
 /** Release all AUTO_INCREMENT locks of the transaction. */
+TRANSACTIONAL_TARGET
 static void lock_release_autoinc_locks(trx_t *trx)
 {
   {
@@ -5501,6 +5554,7 @@ static void lock_cancel_waiting_and_release(lock_t *lock)
   trx->mutex_unlock();
 }
 #ifdef WITH_WSREP
+TRANSACTIONAL_TARGET
 void lock_sys_t::cancel_lock_wait_for_trx(trx_t *trx)
 {
   lock_sys.wr_lock(SRW_LOCK_CALL);
@@ -5523,13 +5577,16 @@ void lock_sys_t::cancel_lock_wait_for_trx(trx_t *trx)
 @retval DB_SUCCESS    if no lock existed
 @retval DB_DEADLOCK   if trx->lock.was_chosen_as_deadlock_victim was set
 @retval DB_LOCK_WAIT  if the lock was canceled */
+TRANSACTIONAL_TARGET
 dberr_t lock_sys_t::cancel(trx_t *trx, lock_t *lock, bool check_victim)
 {
   mysql_mutex_assert_owner(&lock_sys.wait_mutex);
   ut_ad(trx->lock.wait_lock == lock);
   ut_ad(trx->state == TRX_STATE_ACTIVE);
   dberr_t err= DB_SUCCESS;
-
+#ifndef NO_ELISION
+  // FIXME
+#endif
   if (lock->is_table())
   {
     if (!lock_sys.rd_lock_try())
@@ -5620,6 +5677,7 @@ void lock_sys_t::cancel(trx_t *trx)
 Unlocks AUTO_INC type locks that were possibly reserved by a trx. This
 function should be called at the the end of an SQL statement, by the
 connection thread that owns the transaction (trx->mysql_thd). */
+TRANSACTIONAL_TARGET
 void
 lock_unlock_table_autoinc(
 /*======================*/
@@ -5675,7 +5733,7 @@ dberr_t lock_trx_handle_wait(trx_t *trx)
   @param[in]  table  check if there are any locks held on records in this table
                      or on the table itself
 */
-
+TRANSACTIONAL_TARGET
 static my_bool lock_table_locks_lookup(rw_trx_hash_element_t *element,
                                        const dict_table_t *table)
 {
@@ -5711,6 +5769,7 @@ static my_bool lock_table_locks_lookup(rw_trx_hash_element_t *element,
 
 /** Check if there are any locks on a table.
 @return true if table has either table or record locks. */
+TRANSACTIONAL_TARGET
 bool lock_table_has_locks(dict_table_t *table)
 {
   if (table->n_rec_locks)
@@ -5745,6 +5804,7 @@ lock_table_lock_list_init(
 Check if the transaction holds any locks on the sys tables
 or its records.
 @return the strongest lock found on any sys table or 0 for none */
+TRANSACTIONAL_TARGET
 const lock_t*
 lock_trx_has_sys_table_locks(
 /*=========================*/
@@ -5828,7 +5888,7 @@ namespace Deadlock
   /** rewind(3) the file used for storing the latest detected deadlock and
   print a heading message to stderr if printing of all deadlocks to stderr
   is enabled. */
-  static void start_print()
+  TRANSACTIONAL_TARGET static void start_print()
   {
     lock_sys.assert_locked();
 
@@ -5851,7 +5911,7 @@ namespace Deadlock
 
   /** Print transaction data to the deadlock file and possibly to stderr.
   @param trx transaction */
-  static void print(const trx_t &trx)
+  TRANSACTIONAL_TARGET static void print(const trx_t &trx)
   {
     lock_sys.assert_locked();
 
@@ -5868,7 +5928,7 @@ namespace Deadlock
 
   /** Print lock data to the deadlock file and possibly to stderr.
   @param lock record or table type lock */
-  static void print(const lock_t &lock)
+  TRANSACTIONAL_TARGET static void print(const lock_t &lock)
   {
     lock_sys.assert_locked();
 
@@ -5889,7 +5949,7 @@ namespace Deadlock
     }
   }
 
-  ATTRIBUTE_COLD
+  TRANSACTIONAL_TARGET ATTRIBUTE_COLD
   /** Report a deadlock (cycle in the waits-for graph).
   @param trx        transaction waiting for a lock in this thread
   @param current_trx whether trx belongs to the current thread
@@ -5898,7 +5958,7 @@ namespace Deadlock
   static trx_t *report(trx_t *const trx, bool current_trx)
   {
     mysql_mutex_assert_owner(&lock_sys.wait_mutex);
-    ut_ad(lock_sys.is_writer() == !current_trx);
+    ut_ad(xtest() || lock_sys.is_writer() == !current_trx);
 
     /* Normally, trx should be a direct part of the deadlock
     cycle. However, if innodb_deadlock_detect had been OFF in the
@@ -5931,6 +5991,9 @@ namespace Deadlock
     undo_no_t victim_weight= ~0ULL;
     unsigned victim_pos= 0, trx_pos= 0;
 
+    /* Here, lock elision does not make sense, because
+    for the output we are going to invoke system calls,
+    which would interrupt a memory transaction. */
     if (current_trx && !lock_sys.wr_lock_try())
     {
       mysql_mutex_unlock(&lock_sys.wait_mutex);
@@ -6086,11 +6149,15 @@ static bool Deadlock::check_and_resolve(trx_t *trx)
 }
 
 /** Check for deadlocks while holding only lock_sys.wait_mutex. */
+TRANSACTIONAL_TARGET
 void lock_sys_t::deadlock_check()
 {
   ut_ad(!is_writer());
   mysql_mutex_assert_owner(&wait_mutex);
   bool acquired= false;
+#ifndef NO_ELISION
+  bool elided= false;
+#endif
 
   if (Deadlock::to_be_checked)
   {
@@ -6099,7 +6166,16 @@ void lock_sys_t::deadlock_check()
       auto i= Deadlock::to_check.begin();
       if (i == Deadlock::to_check.end())
         break;
-      if (!acquired)
+      if (acquired);
+#ifndef NO_ELISION
+      else if (xbegin())
+      {
+        if (latch.is_locked_or_waiting())
+          xabort<0xff>();
+        acquired= elided= true;
+      }
+#endif
+      else
       {
         acquired= wr_lock_try();
         if (!acquired)
@@ -6119,6 +6195,10 @@ void lock_sys_t::deadlock_check()
     Deadlock::to_be_checked= false;
   }
   ut_ad(Deadlock::to_check.empty());
+#ifndef NO_ELISION
+  if (elided)
+    return;
+#endif
   if (acquired)
     wr_unlock();
 }

@@ -371,6 +371,7 @@ Looks for a similar predicate lock struct by the same trx on the same page.
 This can be used to save space when a new record lock should be set on a page:
 no new struct is needed, if a suitable old one is found.
 @return	lock or NULL */
+TRANSACTIONAL_TARGET
 static
 lock_t*
 lock_prdt_find_on_page(
@@ -408,6 +409,7 @@ lock_prdt_find_on_page(
 /*********************************************************************//**
 Adds a predicate lock request in the predicate lock queue.
 @return	lock where the bit was set */
+TRANSACTIONAL_TARGET
 static
 lock_t*
 lock_prdt_add_to_queue(
@@ -551,6 +553,7 @@ lock_prdt_insert_check_and_lock(
 /**************************************************************//**
 Check whether any predicate lock in parent needs to propagate to
 child page after split. */
+TRANSACTIONAL_TARGET
 void
 lock_prdt_update_parent(
 /*====================*/
@@ -603,6 +606,7 @@ lock_prdt_update_parent(
 
 /**************************************************************//**
 Update predicate lock when page splits */
+TRANSACTIONAL_TARGET
 static
 void
 lock_prdt_update_split_low(
@@ -653,6 +657,7 @@ lock_prdt_update_split_low(
 
 /**************************************************************//**
 Update predicate lock when page splits */
+TRANSACTIONAL_TARGET
 void
 lock_prdt_update_split(
 /*===================*/
@@ -863,6 +868,7 @@ bool lock_test_prdt_page_lock(const trx_t *trx, const page_id_t page_id)
 /*************************************************************//**
 Moves the locks of a page to another page and resets the lock bits of
 the donating records. */
+TRANSACTIONAL_TARGET
 void
 lock_prdt_rec_move(
 /*===============*/
@@ -894,6 +900,7 @@ lock_prdt_rec_move(
 /** Remove locks on a discarded SPATIAL INDEX page.
 @param id   page to be discarded
 @param page whether to discard also from lock_sys.prdt_hash */
+TRANSACTIONAL_TARGET
 void lock_sys_t::prdt_page_free_from_discard(const page_id_t id, bool all)
 {
   const auto id_fold= id.fold();

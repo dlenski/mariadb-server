@@ -1214,6 +1214,7 @@ If mode is PAGE_CUR_LE , cursor is left at the place where an insert of the
 search tuple should be performed in the B-tree. InnoDB does an insert
 immediately after the cursor. Thus, the cursor may end up on a user record,
 or on a page infimum record. */
+TRANSACTIONAL_TARGET
 dberr_t
 btr_cur_search_to_nth_level_func(
 	dict_index_t*	index,	/*!< in: index */

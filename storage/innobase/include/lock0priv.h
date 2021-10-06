@@ -459,7 +459,7 @@ lock_rec_get_n_bits(
 
 /**********************************************************************//**
 Sets the nth bit of a record lock to TRUE. */
-UNIV_INLINE
+TRANSACTIONAL_INLINE inline
 void
 lock_rec_set_nth_bit(
 /*=================*/
@@ -470,7 +470,7 @@ lock_rec_set_nth_bit(
 @param[in,out] lock record lock
 @param[in] i index of the bit that will be reset
 @return previous value of the bit */
-inline byte lock_rec_reset_nth_bit(lock_t* lock, ulint i)
+TRANSACTIONAL_INLINE inline byte lock_rec_reset_nth_bit(lock_t* lock, ulint i)
 {
 	ut_ad(!lock->is_table());
 	ut_ad(lock_sys.is_writer() || lock->trx->mutex_is_owner());

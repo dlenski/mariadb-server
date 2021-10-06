@@ -36,6 +36,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #ifdef NO_ELISION
 constexpr bool have_transactional_memory= false;
+static inline bool xtest() { return false; }
 # define TRANSACTIONAL_TARGET /* nothing */
 #else
 # if defined __i386__||defined __x86_64__||defined _M_IX86||defined _M_X64
@@ -56,6 +57,11 @@ TRANSACTIONAL_INLINE static inline bool xbegin()
   return have_transactional_memory && _xbegin() == _XBEGIN_STARTED;
 }
 
+TRANSACTIONAL_INLINE static inline bool xtest()
+{
+  return have_transactional_memory && _xtest();
+}
+
 template<unsigned char i>
 TRANSACTIONAL_INLINE static inline void xabort() { _xabort(i); }
 
@@ -68,6 +74,11 @@ static inline bool transactional_lock_enabled() { return true; }
 #  define TRANSACTIONAL_INLINE
 
 static inline bool xbegin() { return __TM_begin() == _HTM_TBEGIN_STARTED; }
+
+static inline bool xtest()
+{
+  return _HTM_STATE (__builtin_ttest ()) == _HTM_TRANSACTIONAL;
+}
 
 template<unsigned char i> static inline void xabort() { __TM_abort(); }
 
