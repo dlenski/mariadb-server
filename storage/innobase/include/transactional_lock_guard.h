@@ -38,6 +38,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 constexpr bool have_transactional_memory= false;
 static inline bool xtest() { return false; }
 # define TRANSACTIONAL_TARGET /* nothing */
+# define TRANSACTIONAL_INLINE /* nothing */
 #else
 # if defined __i386__||defined __x86_64__||defined _M_IX86||defined _M_X64
 extern bool have_transactional_memory;

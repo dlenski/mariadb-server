@@ -698,8 +698,10 @@ srv_free(void)
 Boots the InnoDB server. */
 void srv_boot()
 {
+#ifndef NO_ELISION
   if (transactional_lock_enabled())
     sql_print_information("InnoDB: Using transactional memory");
+#endif
   srv_thread_pool_init();
   trx_pool_init();
   srv_init();
