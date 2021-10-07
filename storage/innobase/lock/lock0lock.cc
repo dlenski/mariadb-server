@@ -5743,14 +5743,12 @@ bool lock_table_has_locks(dict_table_t *table)
     xend();
   }
   else
-  {
 #endif
+  {
     table->lock_mutex_lock();
     len= UT_LIST_GET_LEN(table->locks);
     table->lock_mutex_unlock();
-#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
   }
-#endif
   if (len)
     return true;
 #ifdef UNIV_DEBUG

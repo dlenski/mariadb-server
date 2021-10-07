@@ -3185,6 +3185,7 @@ the query cache.
 @param[in]	table	table object
 @param[in]	trx	transaction object
 @return whether the storing or retrieving from the query cache is permitted */
+TRANSACTIONAL_TARGET
 static bool innobase_query_caching_table_check_low(
 	dict_table_t* table, trx_t* trx)
 {
@@ -3210,6 +3211,16 @@ static bool innobase_query_caching_table_check_low(
 	if (trx->read_view.is_open() && trx->read_view.low_limit_id() < inv) {
 		return false;
 	}
+
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+	if (xbegin()) {
+		if (table->lock_mutex_is_locked())
+			xabort<0xff>();
+		auto len = UT_LIST_GET_LEN(table->locks);
+		xend();
+		return len == 0;
+	}
+#endif
 
 	table->lock_mutex_lock();
 	auto len= UT_LIST_GET_LEN(table->locks);
