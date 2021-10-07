@@ -1069,7 +1069,7 @@ struct TMLockTrxGuard
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
     if (xbegin())
     {
-      if (!lock_sys.latch.is_locked() && !trx.mutex_is_locked())
+      if (!lock_sys.latch.is_locked() && was_elided())
         return;
       xabort<0xff>();
     }
@@ -1081,7 +1081,7 @@ struct TMLockTrxGuard
   ~TMLockTrxGuard()
   {
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
-    if (!lock_sys.latch.is_locked())
+    if (was_elided())
     {
       xend();
       return;
@@ -1090,6 +1090,11 @@ struct TMLockTrxGuard
     lock_sys.rd_unlock();
     trx.mutex_unlock();
   }
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  bool was_elided() const noexcept { return !trx.mutex_is_locked(); }
+#else
+  bool was_elided() const noexcept { return false; }
+#endif
 };
 
 /** guard for trx_t::mutex using transactional memory */
