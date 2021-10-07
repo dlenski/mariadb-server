@@ -36,7 +36,9 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #ifdef NO_ELISION
 constexpr bool have_transactional_memory= false;
+# ifdef UNIV_DEBUG
 static inline bool xtest() { return false; }
+# endif
 # define TRANSACTIONAL_TARGET /* nothing */
 # define TRANSACTIONAL_INLINE /* nothing */
 #else
@@ -58,10 +60,14 @@ TRANSACTIONAL_INLINE static inline bool xbegin()
   return have_transactional_memory && _xbegin() == _XBEGIN_STARTED;
 }
 
-TRANSACTIONAL_INLINE static inline bool xtest()
-{
-  return have_transactional_memory && _xtest();
-}
+#  ifdef UNIV_DEBUG
+#   ifdef __GNUC__
+/** @return whether a memory transaction is active */
+bool xtest();
+#   else
+static inline bool xtest() { return have_transactional_memory && _xtest(); }
+#   endif
+#  endif
 
 template<unsigned char i>
 TRANSACTIONAL_INLINE static inline void xabort() { _xabort(i); }
@@ -76,10 +82,12 @@ static inline bool transactional_lock_enabled() { return true; }
 
 static inline bool xbegin() { return __TM_begin() == _HTM_TBEGIN_STARTED; }
 
+#  ifdef UNIV_DEBUG
 static inline bool xtest()
 {
   return _HTM_STATE (__builtin_ttest ()) == _HTM_TRANSACTIONAL;
 }
+#  endif
 
 template<unsigned char i> static inline void xabort() { __TM_abort(); }
 

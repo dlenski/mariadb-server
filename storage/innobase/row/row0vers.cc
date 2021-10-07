@@ -385,7 +385,6 @@ index record.
 @return	the active transaction; state must be rechecked after
 acquiring trx->mutex, and trx->release_reference() must be invoked
 @retval	NULL if the record was committed */
-TRANSACTIONAL_TARGET
 trx_t*
 row_vers_impl_x_locked(
 	trx_t*		caller_trx,

@@ -49,6 +49,11 @@ bool transactional_lock_enabled()
   have_transactional_memory= ebx & 1U << 11;
   return have_transactional_memory;
 }
+
+#  ifdef UNIV_DEBUG
+TRANSACTIONAL_TARGET
+bool xtest() { return have_transactional_memory && _xtest(); }
+#  endif
 # endif
 #endif
 
