@@ -7531,11 +7531,10 @@ void set_position(JOIN *join,uint idx,JOIN_TAB *table,KEYUSE *key)
     after joining rows from this table to rows from preceding tables.
 */
 
-inline
-double matching_candidates_in_table(JOIN_TAB *s, bool with_found_constraint,
-                                    uint use_cond_selectivity)
+static double matching_candidates_in_table(JOIN_TAB *s,
+                                           bool with_found_constraint,
+                                           uint use_cond_selectivity)
 {
-  ha_rows records;
   double dbl_records;
 
   if (use_cond_selectivity > 1)
@@ -7553,10 +7552,19 @@ double matching_candidates_in_table(JOIN_TAB *s, bool with_found_constraint,
                 sel <= s->table->opt_range_condition_rows /
                 table_records);
     dbl_records= table_records * sel;
-    return dbl_records;
   }
-
-  records = s->found_records;
+  else
+  {
+    /*
+      This is only taking into considering constant key parts use with
+      this table!
+      If no such conditions existed the following should hold:
+      s->table->opt_range_condition_rows == s->found_rows ==
+      s->records.
+    */
+    DBUG_ASSERT(s->table->opt_range_condition_rows <= s->found_records);
+    dbl_records= rows2double(s->table->opt_range_condition_rows);
+  }
 
   /*
     If there is a filtering condition on the table (i.e. ref analyzer found
@@ -7567,17 +7575,9 @@ double matching_candidates_in_table(JOIN_TAB *s, bool with_found_constraint,
     This heuristic is supposed to force tables used in exprZ to be before
     this table in join order.
   */
+
   if (with_found_constraint)
-    records-= records/4;
-
-    /*
-      If applicable, get a more accurate estimate. Don't use the two
-      heuristics at once.
-    */
-  if (s->table->opt_range_condition_rows != s->found_records)
-    records= s->table->opt_range_condition_rows;
-
-  dbl_records= (double)records;
+    dbl_records-= dbl_records/4;
   return dbl_records;
 }
 
@@ -7812,6 +7812,11 @@ best_access_path(JOIN      *join,
         } while (keyuse->table == table && keyuse->key == key &&
                  keyuse->keypart == keypart);
 	found_ref|= best_part_found_ref;
+        /* Remember if the key expression used previous non const tables */
+        found_constraint= MY_TEST(found_part &&
+                                  (keyuse->used_tables &
+                                   ~(remaining_tables |
+                                     join->const_table_map)));
       } while (keyuse->table == table && keyuse->key == key);
 
       /*
@@ -7841,7 +7846,6 @@ best_access_path(JOIN      *join,
       }
       else
       {
-        found_constraint= MY_TEST(found_part);
         loose_scan_opt.check_ref_access_part1(s, key, start_key, found_part);
 
         /* Check if we found full key */
