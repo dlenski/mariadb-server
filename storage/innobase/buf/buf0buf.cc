@@ -1656,7 +1656,6 @@ struct find_interesting_trx
 } // namespace
 
 /** Resize from srv_buf_pool_old_size to srv_buf_pool_size. */
-TRANSACTIONAL_INLINE
 inline void buf_pool_t::resize()
 {
   ut_ad(this == &buf_pool);
@@ -1748,6 +1747,8 @@ withdraw_retry:
 			{found, withdraw_started, my_hrtime_coarse()};
 		withdraw_started = current_time;
 
+		/* This is going to exceed the maximum size of a
+		memory transaction. */
 		LockMutexGuard g{SRW_LOCK_CALL};
 		trx_sys.trx_list.for_each(f);
 	}
@@ -2009,7 +2010,6 @@ calc_buf_pool_size:
 }
 
 /** Thread pool task invoked by innodb_buffer_pool_size changes. */
-TRANSACTIONAL_TARGET
 static void buf_resize_callback(void *)
 {
   DBUG_ENTER("buf_resize_callback");

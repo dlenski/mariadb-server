@@ -1359,7 +1359,6 @@ bool dict_sys_t::load_sys_tables()
   return mismatch;
 }
 
-TRANSACTIONAL_TARGET
 dberr_t dict_sys_t::create_or_check_sys_tables()
 {
   if (sys_tables_exist())
@@ -1382,8 +1381,10 @@ dberr_t dict_sys_t::create_or_check_sys_tables()
   trx_start_for_ddl(trx);
 
   {
+    /* Do not bother with transactional memory; this is only
+    executed at startup, with no conflicts present. */
     LockMutexGuard g{SRW_LOCK_CALL};
-    trx->mutex_lock(); // FIXME
+    trx->mutex_lock();
     lock_table_create(dict_sys.sys_tables, LOCK_X, trx);
     lock_table_create(dict_sys.sys_columns, LOCK_X, trx);
     lock_table_create(dict_sys.sys_indexes, LOCK_X, trx);

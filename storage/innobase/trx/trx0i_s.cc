@@ -1207,7 +1207,6 @@ static void fetch_data_into_cache_low(trx_i_s_cache_t *cache, const trx_t *trx)
   table cache buffer. Cache must be locked for write.
 */
 
-TRANSACTIONAL_TARGET
 static void fetch_data_into_cache(trx_i_s_cache_t *cache)
 {
   LockMutexGuard g{SRW_LOCK_CALL};

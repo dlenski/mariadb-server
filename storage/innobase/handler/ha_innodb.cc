@@ -18467,7 +18467,6 @@ static struct st_mysql_storage_engine innobase_storage_engine=
 @param bf_trx    brute force applier transaction
 @param thd_id    thd_get_thread_id(victim_trx->mysql_htd)
 @param trx_id    victim_trx->id */
-TRANSACTIONAL_TARGET
 void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id)
 {
   THD *bf_thd= bf_trx->mysql_thd;
@@ -18479,9 +18478,11 @@ void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id)
     trx_t *vtrx= thd_to_trx(vthd);
     if (vtrx)
     {
+      /* Do not bother with lock elision using transactional memory here;
+      this is rather complex code */
       LockMutexGuard g{SRW_LOCK_CALL};
       mysql_mutex_lock(&lock_sys.wait_mutex);
-      vtrx->mutex_lock(); // FIXME
+      vtrx->mutex_lock();
       /* victim transaction is either active or prepared, if it has already
 	 proceeded to replication phase */
       if (vtrx->id == trx_id)

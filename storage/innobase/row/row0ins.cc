@@ -709,7 +709,7 @@ row_ins_foreign_trx_print(
 	ut_ad(!srv_read_only_mode);
 
 	{
-		LockMutexGuard g{SRW_LOCK_CALL};
+		TMLockMutexGuard g{SRW_LOCK_CALL};
 		n_rec_locks = trx->lock.n_rec_locks;
 		n_trx_locks = UT_LIST_GET_LEN(trx->lock.trx_locks);
 		heap_size = mem_heap_get_size(trx->lock.lock_heap);
