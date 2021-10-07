@@ -3213,9 +3213,10 @@ static bool innobase_query_caching_table_check_low(
 	}
 
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+	x_context;
 	if (xbegin()) {
 		if (table->lock_mutex_is_locked())
-			xabort<0xff>();
+			xabort();
 		auto len = UT_LIST_GET_LEN(table->locks);
 		xend();
 		return len == 0;

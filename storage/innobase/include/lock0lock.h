@@ -996,11 +996,12 @@ struct TMLockMutexGuard
   TMLockMutexGuard(SRW_LOCK_ARGS(const char *file, unsigned line))
   {
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+    x_context;
     if (xbegin())
     {
       if (was_elided())
         return;
-      xabort<0xff>();
+      xabort();
     }
 #endif
     lock_sys.wr_lock(SRW_LOCK_ARGS(file, line));
@@ -1067,11 +1068,12 @@ struct TMLockTrxGuard
 #endif
   {
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+    x_context;
     if (xbegin())
     {
       if (!lock_sys.latch.is_locked() && was_elided())
         return;
-      xabort<0xff>();
+      xabort();
     }
 #endif
     lock_sys.rd_lock(SRW_LOCK_ARGS(file, line));
@@ -1105,11 +1107,12 @@ struct TMTrxGuard
   TRANSACTIONAL_INLINE TMTrxGuard(trx_t &trx) : trx(trx)
   {
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+    x_context;
     if (xbegin())
     {
       if (was_elided())
         return;
-      xabort<0xff>();
+      xabort();
     }
 #endif
     trx.mutex_lock();

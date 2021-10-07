@@ -1958,10 +1958,11 @@ static bool trx_has_lock_x(const trx_t &trx, dict_table_t& table)
   uint32_t n;
 
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  x_context;
   if (xbegin())
   {
     if (table.lock_mutex_is_locked())
-      xabort<0xff>();
+      xabort();
     n= table.n_lock_x_or_s;
     xend();
   }

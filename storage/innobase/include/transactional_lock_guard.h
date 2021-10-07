@@ -45,6 +45,7 @@ static inline bool xtest() { return false; }
 # if defined __i386__||defined __x86_64__||defined _M_IX86||defined _M_X64
 extern bool have_transactional_memory;
 bool transactional_lock_enabled();
+#define x_context /* empty */
 
 #  include <immintrin.h>
 #  ifdef __GNUC__
@@ -69,18 +70,23 @@ static inline bool xtest() { return have_transactional_memory && _xtest(); }
 #   endif
 #  endif
 
-template<unsigned char i>
-TRANSACTIONAL_INLINE static inline void xabort() { _xabort(i); }
+TRANSACTIONAL_INLINE static inline void xabort() { _xabort(0); }
 
 TRANSACTIONAL_INLINE static inline void xend() { _xend(); }
 # elif defined __powerpc64__ || defined __s390x__ || defined __s390__
 constexpr bool have_transactional_memory= true;
 static inline bool transactional_lock_enabled() { return true; }
 #  include <htmxlintrin.h>
-#  define TRANSACTIONAL_TARGET
-#  define TRANSACTIONAL_INLINE
+#  if defined __GNUC__ && defined __powerpc64__
+#   define TRANSACTIONAL_TARGET __attribute__((target("htm")))
+#   define TRANSACTIONAL_INLINE __attribute__((target("htm"),always_inline))
+#  else
+#   define TRANSACTIONAL_TARGET /* nothing */
+#   define TRANSACTIONAL_INLINE /* nothing */
+#  endif
 
-static inline bool xbegin() { return __TM_begin() == _HTM_TBEGIN_STARTED; }
+#define x_context TM_buff_type TM_buff
+#define xbegin() __TM_begin(TM_buff) == _HTM_TBEGIN_STARTED
 
 #  ifdef UNIV_DEBUG
 static inline bool xtest()
@@ -104,11 +110,12 @@ public:
   TRANSACTIONAL_INLINE transactional_lock_guard(mutex &m) : m(m)
   {
 #ifndef NO_ELISION
+    x_context;
     if (xbegin())
     {
       if (was_elided())
         return;
-      xabort<0xff>();
+      xabort();
     }
 #endif
     m.lock();
@@ -143,6 +150,7 @@ public:
   TRANSACTIONAL_INLINE transactional_shared_lock_guard(mutex &m) : m(m)
   {
 #ifndef NO_ELISION
+    x_context;
     if (xbegin())
     {
       if (!m.is_locked())
@@ -150,7 +158,7 @@ public:
         elided= true;
         return;
       }
-      xabort<0xff>();
+      xabort();
     }
     elided= false;
 #endif
