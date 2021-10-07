@@ -568,6 +568,7 @@ class lock_sys_t
 {
   friend struct LockGuard;
   friend struct LockMultiGuard;
+  friend struct TMLockGuard;
   friend struct TMLockMutexGuard;
   friend struct TMLockTrxGuard;
 
@@ -797,8 +798,7 @@ public:
   }
 
   /** Assert that wr_lock() has been invoked by this thread */
-  TRANSACTIONAL_INLINE void assert_locked() const
-  { ut_ad(xtest() || is_writer()); }
+  TRANSACTIONAL_INLINE void assert_locked() const { ut_ad(is_writer()); }
   /** Assert that wr_lock() has not been invoked by this thread */
   TRANSACTIONAL_INLINE void assert_unlocked() const { ut_ad(!is_writer()); }
 #ifdef UNIV_DEBUG
@@ -806,7 +806,7 @@ public:
   TRANSACTIONAL_INLINE bool is_writer() const
   {
     return writer.load(std::memory_order_relaxed) == os_thread_get_curr_id() ||
-      xtest();
+      (xtest() && !lock_sys.latch.is_locked_or_waiting());
   }
   /** Assert that a lock shard is exclusively latched (by some thread) */
   void assert_locked(const lock_t &lock) const;
@@ -959,17 +959,9 @@ struct LockMutexGuard
 /** lock_sys latch guard for 1 page_id_t */
 struct LockGuard
 {
-  TRANSACTIONAL_TARGET
   LockGuard(lock_sys_t::hash_table &hash, const page_id_t id);
-  TRANSACTIONAL_INLINE ~LockGuard()
+  ~LockGuard()
   {
-#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
-    if (elided)
-    {
-      xend();
-      return;
-    }
-#endif
     lock_sys_t::hash_table::latch(cell_)->release();
     /* Must be last, to avoid a race with lock_sys_t::hash_table::resize() */
     lock_sys.rd_unlock();
@@ -979,19 +971,14 @@ struct LockGuard
 private:
   /** The hash array cell */
   hash_cell_t *cell_;
-#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
-  /** whether the latches were elided */
-  bool elided;
-#endif
 };
 
 /** lock_sys latch guard for 2 page_id_t */
 struct LockMultiGuard
 {
-  TRANSACTIONAL_TARGET
   LockMultiGuard(lock_sys_t::hash_table &hash,
                  const page_id_t id1, const page_id_t id2);
-  TRANSACTIONAL_TARGET ~LockMultiGuard();
+  ~LockMultiGuard();
 
   /** @return the first hash array cell */
   hash_cell_t &cell1() const { return *cell1_; }
@@ -1002,10 +989,6 @@ private:
   hash_cell_t *cell1_;
   /** The second hash array cell */
   hash_cell_t *cell2_;
-#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
-  /** whether the latches were elided */
-  bool elided;
-#endif
 };
 
 /** lock_sys.latch exclusive guard using transactional memory */
@@ -1038,6 +1021,35 @@ struct TMLockMutexGuard
   { return !lock_sys.latch.is_locked_or_waiting(); }
 #else
   bool was_elided() const noexcept { return false; }
+#endif
+};
+
+/** lock_sys latch guard for 1 page_id_t, using transactional memory */
+struct TMLockGuard
+{
+  TRANSACTIONAL_TARGET
+  TMLockGuard(lock_sys_t::hash_table &hash, const page_id_t id);
+  TRANSACTIONAL_INLINE ~TMLockGuard()
+  {
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+    if (elided)
+    {
+      xend();
+      return;
+    }
+#endif
+    lock_sys_t::hash_table::latch(cell_)->release();
+    /* Must be last, to avoid a race with lock_sys_t::hash_table::resize() */
+    lock_sys.rd_unlock();
+  }
+  /** @return the hash array cell */
+  hash_cell_t &cell() const { return *cell_; }
+private:
+  /** The hash array cell */
+  hash_cell_t *cell_;
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  /** whether the latches were elided */
+  bool elided;
 #endif
 };
 
@@ -1080,6 +1092,41 @@ struct TMLockTrxGuard
     lock_sys.rd_unlock();
     trx.mutex_unlock();
   }
+};
+
+/** guard for trx_t::mutex using transactional memory */
+struct TMTrxGuard
+{
+  trx_t &trx;
+
+  TRANSACTIONAL_INLINE TMTrxGuard(trx_t &trx) : trx(trx)
+  {
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+    if (xbegin())
+    {
+      if (was_elided())
+        return;
+      xabort<0xff>();
+    }
+#endif
+    trx.mutex_lock();
+  }
+  TRANSACTIONAL_INLINE ~TMTrxGuard()
+  {
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+    if (was_elided())
+    {
+      xend();
+      return;
+    }
+#endif
+    trx.mutex_unlock();
+  }
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  bool was_elided() const noexcept { return !trx.mutex_is_locked(); }
+#else
+  bool was_elided() const noexcept { return false; }
+#endif
 };
 
 /*********************************************************************//**

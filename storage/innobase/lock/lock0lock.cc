@@ -196,8 +196,45 @@ void lock_sys_t::assert_locked(const hash_cell_t &cell) const
 }
 #endif
 
-TRANSACTIONAL_TARGET
 LockGuard::LockGuard(lock_sys_t::hash_table &hash, page_id_t id)
+{
+  const auto id_fold= id.fold();
+  lock_sys.rd_lock(SRW_LOCK_CALL);
+  cell_= hash.cell_get(id_fold);
+  hash.latch(cell_)->acquire();
+}
+
+LockMultiGuard::LockMultiGuard(lock_sys_t::hash_table &hash,
+                               const page_id_t id1, const page_id_t id2)
+{
+  ut_ad(id1.space() == id2.space());
+  const auto id1_fold= id1.fold(), id2_fold= id2.fold();
+
+  lock_sys.rd_lock(SRW_LOCK_CALL);
+  cell1_= hash.cell_get(id1_fold);
+  cell2_= hash.cell_get(id2_fold);
+
+  auto latch1= hash.latch(cell1_), latch2= hash.latch(cell2_);
+  if (latch1 > latch2)
+    std::swap(latch1, latch2);
+  latch1->acquire();
+  if (latch1 != latch2)
+    latch2->acquire();
+}
+
+LockMultiGuard::~LockMultiGuard()
+{
+  auto latch1= lock_sys_t::hash_table::latch(cell1_),
+    latch2= lock_sys_t::hash_table::latch(cell2_);
+  latch1->release();
+  if (latch1 != latch2)
+    latch2->release();
+  /* Must be last, to avoid a race with lock_sys_t::hash_table::resize() */
+  lock_sys.rd_unlock();
+}
+
+TRANSACTIONAL_TARGET
+TMLockGuard::TMLockGuard(lock_sys_t::hash_table &hash, page_id_t id)
 {
   const auto id_fold= id.fold();
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
@@ -216,58 +253,6 @@ LockGuard::LockGuard(lock_sys_t::hash_table &hash, page_id_t id)
   lock_sys.rd_lock(SRW_LOCK_CALL);
   cell_= hash.cell_get(id_fold);
   hash.latch(cell_)->acquire();
-}
-
-TRANSACTIONAL_TARGET
-LockMultiGuard::LockMultiGuard(lock_sys_t::hash_table &hash,
-                               const page_id_t id1, const page_id_t id2)
-{
-  ut_ad(id1.space() == id2.space());
-  const auto id1_fold= id1.fold(), id2_fold= id2.fold();
-#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
-  if (xbegin())
-  {
-    if (lock_sys.latch.is_locked())
-      xabort<0xff>();
-    cell1_= hash.cell_get(id1_fold);
-    cell2_= hash.cell_get(id2_fold);
-    if (hash.latch(cell1_)->is_locked() || hash.latch(cell2_)->is_locked())
-      xabort<0xff>();
-    elided= true;
-    return;
-  }
-  elided= false;
-#endif
-
-  lock_sys.rd_lock(SRW_LOCK_CALL);
-  cell1_= hash.cell_get(id1_fold);
-  cell2_= hash.cell_get(id2_fold);
-
-  auto latch1= hash.latch(cell1_), latch2= hash.latch(cell2_);
-  if (latch1 > latch2)
-    std::swap(latch1, latch2);
-  latch1->acquire();
-  if (latch1 != latch2)
-    latch2->acquire();
-}
-
-TRANSACTIONAL_TARGET
-LockMultiGuard::~LockMultiGuard()
-{
-#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
-  if (elided)
-  {
-    xend();
-    return;
-  }
-#endif
-  auto latch1= lock_sys_t::hash_table::latch(cell1_),
-    latch2= lock_sys_t::hash_table::latch(cell2_);
-  latch1->release();
-  if (latch1 != latch2)
-    latch2->release();
-  /* Must be last, to avoid a race with lock_sys_t::hash_table::resize() */
-  lock_sys.rd_unlock();
 }
 
 /** Pretty-print a table lock.
@@ -1184,7 +1169,7 @@ lock_rec_create_low(
 	ulint		n_bytes;
 
 	ut_d(lock_sys.hash_get(type_mode).assert_locked(page_id));
-	ut_ad(holds_trx_mutex == trx->mutex_is_owner());
+	ut_ad(xtest() || holds_trx_mutex == trx->mutex_is_owner());
 	ut_ad(dict_index_is_clust(index) || !dict_index_is_online_ddl(index));
 	ut_ad(!(type_mode & LOCK_TABLE));
 	ut_ad(trx->state != TRX_STATE_NOT_STARTED);
@@ -1311,7 +1296,7 @@ lock_rec_enqueue_waiting(
 	ut_ad(dict_index_is_clust(index) || !dict_index_is_online_ddl(index));
 
 	trx_t* trx = thr_get_trx(thr);
-	ut_ad(trx->mutex_is_owner());
+	ut_ad(xtest() || trx->mutex_is_owner());
 	ut_ad(!trx->dict_operation_lock_mode);
 
 	if (trx->mysql_thd && thd_lock_wait_timeout(trx->mysql_thd) == 0) {
@@ -1398,7 +1383,7 @@ lock_rec_add_to_queue(
 					transaction mutex */
 {
 	ut_d(lock_sys.hash_get(type_mode).assert_locked(id));
-	ut_ad(caller_owns_trx_mutex == trx->mutex_is_owner());
+	ut_ad(xtest() || caller_owns_trx_mutex == trx->mutex_is_owner());
 	ut_ad(index->is_primary()
 	      || dict_index_get_online_status(index) != ONLINE_INDEX_CREATION);
 	ut_ad(!(type_mode & LOCK_TABLE));
@@ -1471,9 +1456,11 @@ lock_rec_add_to_queue(
 			if (caller_owns_trx_mutex) {
 				trx->mutex_unlock();
 			}
-			lock_trx->mutex_lock();
-			lock_rec_set_nth_bit(lock, heap_no);
-			lock_trx->mutex_unlock();
+			{
+				TMTrxGuard tg{*lock_trx};
+				lock_rec_set_nth_bit(lock, heap_no);
+			}
+
 			if (caller_owns_trx_mutex) {
 				trx->mutex_lock();
 			}
@@ -2132,10 +2119,8 @@ lock_rec_reset_and_release_wait(const hash_cell_t &cell, const page_id_t id,
       lock_rec_cancel(lock);
     else
     {
-      trx_t *lock_trx= lock->trx;
-      lock_trx->mutex_lock();
+      TMTrxGuard tg{*lock->trx};
       lock_rec_reset_nth_bit(lock, heap_no);
-      lock_trx->mutex_unlock();
     }
   }
 }
@@ -2323,7 +2308,7 @@ lock_move_reorganize_page(
     const page_id_t id{block->page.id()};
     const auto id_fold= id.fold();
     {
-      LockGuard g{lock_sys.rec_hash, id};
+      TMLockGuard g{lock_sys.rec_hash, id};
       if (!lock_sys_t::get_first(g.cell(), id))
         return;
     }
@@ -2471,6 +2456,7 @@ lock_move_rec_list_end(
   const page_id_t id{block->page.id()};
   const page_id_t new_id{new_block->page.id()};
   {
+    /* This would likely be too large for a memory transaction. */
     LockMultiGuard g{lock_sys.rec_hash, id, new_id};
 
     /* Note: when we move locks from record to record, waiting locks
@@ -2596,6 +2582,7 @@ lock_move_rec_list_start(
   const page_id_t new_id{new_block->page.id()};
 
   {
+    /* This would likely be too large for a memory transaction. */
     LockMultiGuard g{lock_sys.rec_hash, id, new_id};
 
     for (lock_t *lock= lock_sys_t::get_first(g.cell1(), id); lock;
@@ -2706,6 +2693,7 @@ lock_rtr_move_rec_list(
   const page_id_t new_id{new_block->page.id()};
 
   {
+    /* This would likely be too large for a memory transaction. */
     LockMultiGuard g{lock_sys.rec_hash, id, new_id};
 
     for (lock_t *lock= lock_sys_t::get_first(g.cell1(), id); lock;
@@ -2780,6 +2768,7 @@ lock_update_split_right(
   const page_id_t l{left_block->page.id()};
   const page_id_t r{right_block->page.id()};
 
+  /* This would likely be too large for a memory transaction. */
   LockMultiGuard g{lock_sys.rec_hash, l, r};
 
   /* Move the locks on the supremum of the left page to the supremum
@@ -2833,6 +2822,7 @@ lock_update_merge_right(
 
   const page_id_t l{left_block->page.id()};
   const page_id_t r{right_block->page.id()};
+  /* This would likely be too large for a memory transaction. */
   LockMultiGuard g{lock_sys.rec_hash, l, r};
 
   /* Inherit the locks from the supremum of the left page to the
@@ -2859,6 +2849,7 @@ to be updated. */
 void lock_update_root_raise(const buf_block_t &block, const page_id_t root)
 {
   const page_id_t id{block.page.id()};
+  /* This would likely be too large for a memory transaction. */
   LockMultiGuard g{lock_sys.rec_hash, id, root};
   /* Move the locks on the supremum of the root to the supremum of block */
   lock_rec_move(g.cell1(), block, id, g.cell2(), root,
@@ -2871,6 +2862,7 @@ void lock_update_root_raise(const buf_block_t &block, const page_id_t root)
 void lock_update_copy_and_discard(const buf_block_t &new_block, page_id_t old)
 {
   const page_id_t id{new_block.page.id()};
+  /* This would likely be too large for a memory transaction. */
   LockMultiGuard g{lock_sys.rec_hash, id, old};
   /* Move the locks on the supremum of the old page to the supremum of new */
   lock_rec_move(g.cell1(), new_block, id, g.cell2(), old,
@@ -2907,6 +2899,7 @@ void lock_update_merge_left(const buf_block_t& left, const rec_t *orig_pred,
 
   const page_id_t l{left.page.id()};
 
+  /* This would likely be too large for a memory transaction. */
   LockMultiGuard g{lock_sys.rec_hash, l, right};
   const rec_t *left_next_rec= page_rec_get_next_const(orig_pred);
 
@@ -2952,6 +2945,7 @@ lock_rec_reset_and_inherit_gap_locks(
 						donating record */
 {
   const page_id_t heir{heir_block.page.id()};
+  /* This is a rare operation and likely too large for a memory transaction. */
   LockMultiGuard g{lock_sys.rec_hash, heir, donor};
   lock_rec_reset_and_release_wait(g.cell1(), heir, heir_heap_no);
   lock_rec_inherit_to_gap(g.cell1(), heir, g.cell2(), donor, heir_block.frame,
@@ -2976,6 +2970,7 @@ lock_update_discard(
 	ulint		heap_no;
 	const page_id_t	heir(heir_block->page.id());
 	const page_id_t	page_id(block->page.id());
+	/* This would likely be too large for a memory transaction. */
 	LockMultiGuard	g{lock_sys.rec_hash, heir, page_id};
 
 	if (lock_sys_t::get_first(g.cell2(), page_id)) {
@@ -3777,9 +3772,10 @@ lock_rec_unlock(
 
 released:
 	ut_a(!lock->is_waiting());
-	trx->mutex_lock();
-	lock_rec_reset_nth_bit(lock, heap_no);
-	trx->mutex_unlock();
+	{
+		TMTrxGuard tg{*trx};
+		lock_rec_reset_nth_bit(lock, heap_no);
+	}
 
 	/* Check if we can now grant waiting lock requests */
 
@@ -4895,10 +4891,9 @@ lock_rec_insert_check_and_lock(
                                                          g.cell(), id,
                                                          heap_no, trx))
       {
-        trx->mutex_lock();
+        TMTrxGuard tg{*trx}; // FIXME: does this abort too often?
         err= lock_rec_enqueue_waiting(c_lock, type_mode, id, block->frame,
                                       heap_no, index, thr, nullptr);
-        trx->mutex_unlock();
       }
     }
   }
@@ -5504,9 +5499,9 @@ TRANSACTIONAL_TARGET
 static void lock_release_autoinc_locks(trx_t *trx)
 {
   {
-    TMLockMutexGuard g{SRW_LOCK_CALL};
+    LockMutexGuard g{SRW_LOCK_CALL};
     mysql_mutex_lock(&lock_sys.wait_mutex);
-    trx->mutex_lock(); // FIXME
+    trx->mutex_lock();
     auto autoinc_locks= trx->autoinc_locks;
     ut_a(autoinc_locks);
 
@@ -5775,9 +5770,24 @@ bool lock_table_has_locks(dict_table_t *table)
 {
   if (table->n_rec_locks)
     return true;
-  table->lock_mutex_lock(); // FIXME: elide
-  auto len= UT_LIST_GET_LEN(table->locks);
-  table->lock_mutex_unlock();
+  ulint len;
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  if (xbegin())
+  {
+    if (table->lock_mutex_is_locked())
+      xabort<0xff>();
+    len= UT_LIST_GET_LEN(table->locks);
+    xend();
+  }
+  else
+  {
+#endif
+    table->lock_mutex_lock();
+    len= UT_LIST_GET_LEN(table->locks);
+    table->lock_mutex_unlock();
+#if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  }
+#endif
   if (len)
     return true;
 #ifdef UNIV_DEBUG
@@ -6218,6 +6228,7 @@ void lock_update_split_and_merge(
   const page_id_t l{left_block->page.id()};
   const page_id_t r{right_block->page.id()};
 
+  /* This would likely be too large for a memory transaction. */
   LockMultiGuard g{lock_sys.rec_hash, l, r};
   const rec_t *left_next_rec= page_rec_get_next_const(orig_pred);
   ut_ad(!page_rec_is_metadata(left_next_rec));

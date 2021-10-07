@@ -473,7 +473,8 @@ lock_rec_set_nth_bit(
 TRANSACTIONAL_INLINE inline byte lock_rec_reset_nth_bit(lock_t* lock, ulint i)
 {
 	ut_ad(!lock->is_table());
-	ut_ad(lock_sys.is_writer() || lock->trx->mutex_is_owner());
+	ut_ad(lock_sys.is_writer() || lock->trx->mutex_is_owner()
+	      || (xtest() && !lock->trx->mutex_is_locked()));
 	ut_ad(i < lock->un_member.rec_lock.n_bits);
 
 	byte*	b = reinterpret_cast<byte*>(&lock[1]) + (i >> 3);
