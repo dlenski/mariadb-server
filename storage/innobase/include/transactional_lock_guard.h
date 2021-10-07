@@ -105,12 +105,14 @@ template<class mutex>
 class transactional_lock_guard
 {
   mutex &m;
+#ifndef NO_ELISION
+  x_context;
+#endif
 
 public:
   TRANSACTIONAL_INLINE transactional_lock_guard(mutex &m) : m(m)
   {
 #ifndef NO_ELISION
-    x_context;
     if (xbegin())
     {
       if (was_elided())
@@ -142,6 +144,7 @@ class transactional_shared_lock_guard
   mutex &m;
 #ifndef NO_ELISION
   bool elided;
+  x_context;
 #else
   static constexpr bool elided= false;
 #endif
@@ -150,7 +153,6 @@ public:
   TRANSACTIONAL_INLINE transactional_shared_lock_guard(mutex &m) : m(m)
   {
 #ifndef NO_ELISION
-    x_context;
     if (xbegin())
     {
       if (!m.is_locked())

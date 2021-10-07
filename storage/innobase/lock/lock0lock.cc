@@ -232,7 +232,6 @@ TMLockGuard::TMLockGuard(lock_sys_t::hash_table &hash, page_id_t id)
 {
   const auto id_fold= id.fold();
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
-  x_context;
   if (xbegin())
   {
     if (lock_sys.latch.is_locked())

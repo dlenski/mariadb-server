@@ -996,7 +996,6 @@ struct TMLockMutexGuard
   TMLockMutexGuard(SRW_LOCK_ARGS(const char *file, unsigned line))
   {
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
-    x_context;
     if (xbegin())
     {
       if (was_elided())
@@ -1016,6 +1015,7 @@ struct TMLockMutexGuard
   }
 
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  x_context;
   bool was_elided() const noexcept
   { return !lock_sys.latch.is_locked_or_waiting(); }
 #else
@@ -1049,6 +1049,7 @@ private:
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
   /** whether the latches were elided */
   bool elided;
+  x_context;
 #endif
 };
 
@@ -1068,7 +1069,6 @@ struct TMLockTrxGuard
 #endif
   {
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
-    x_context;
     if (xbegin())
     {
       if (!lock_sys.latch.is_locked() && was_elided())
@@ -1093,6 +1093,7 @@ struct TMLockTrxGuard
     trx.mutex_unlock();
   }
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  x_context;
   bool was_elided() const noexcept { return !trx.mutex_is_locked(); }
 #else
   bool was_elided() const noexcept { return false; }
@@ -1107,7 +1108,6 @@ struct TMTrxGuard
   TRANSACTIONAL_INLINE TMTrxGuard(trx_t &trx) : trx(trx)
   {
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
-    x_context;
     if (xbegin())
     {
       if (was_elided())
@@ -1129,6 +1129,7 @@ struct TMTrxGuard
     trx.mutex_unlock();
   }
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  x_context;
   bool was_elided() const noexcept { return !trx.mutex_is_locked(); }
 #else
   bool was_elided() const noexcept { return false; }
