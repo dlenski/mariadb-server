@@ -188,6 +188,9 @@ public:
 class ACL_USER :public ACL_USER_BASE,
                 public ACL_USER_PARAM
 {
+protected:
+  // default shallow copy constructor (protect from non-authorized usage)
+  ACL_USER(const ACL_USER &)= default;
 public:
 
   ACL_USER() { }
@@ -195,7 +198,29 @@ public:
            const Account_options &options,
            const ulong privileges);
 
-  ACL_USER *copy(MEM_ROOT *root)
+  // Copy constructor to make a bit deeper copy on the MEM_ROOT
+  ACL_USER(MEM_ROOT *mem_root, const ACL_USER &orig)
+  {
+    AUTH *dauth= (AUTH*) alloc_root(mem_root, sizeof(AUTH) * orig.nauth);
+    if (!dauth)
+    {
+      bzero((void*)this, sizeof(*this));
+      return;
+    }
+    *this= orig;
+    auth= dauth;
+    for (uint i=0; i < nauth; i++)
+    {
+      auth[i]= orig.auth[i];
+    }
+  }
+
+  void shallow_copy(const ACL_USER &orig)
+  {
+    *this= orig;
+  }
+
+  ACL_USER *copy(MEM_ROOT *root) const
   {
     ACL_USER *dst;
     AUTH *dauth;
@@ -4390,7 +4415,7 @@ static int replace_user_table(THD *thd, const User_table &user_table,
   bool handle_as_role= combo->is_role();
   LEX *lex= thd->lex;
   TABLE *table= user_table.table();
-  ACL_USER new_acl_user, *old_acl_user= 0;
+  ACL_USER *new_acl_user= 0, *old_acl_user= 0;
   DBUG_ENTER("replace_user_table");
 
   mysql_mutex_assert_owner(&acl_cache->lock);
@@ -4493,13 +4518,19 @@ static int replace_user_table(THD *thd, const User_table &user_table,
       my_error(ER_PASSWORD_NO_MATCH, MYF(0));
       goto end;
     }
-    new_acl_user= old_row_exists ? *old_acl_user :
-                  ACL_USER(thd, *combo, lex->account_options, rights);
-    if (acl_user_update(thd, &new_acl_user, nauth,
+
+    new_acl_user= (old_row_exists ?
+                   new (thd->mem_root) ACL_USER(&acl_memroot, *old_acl_user) :
+                   new (thd->mem_root) ACL_USER(thd, *combo,
+                                                lex->account_options,
+                                                rights));
+    if (!new_acl_user)
+      goto end;
+    if (acl_user_update(thd, new_acl_user, nauth,
                         *combo, lex->account_options, rights))
       goto end;
 
-    if (user_table.set_auth(new_acl_user))
+    if (user_table.set_auth(*new_acl_user))
     {
       my_error(ER_COL_COUNT_DOESNT_MATCH_PLEASE_UPDATE, MYF(0),
                user_table.name().str, 3, user_table.num_fields(),
@@ -4554,14 +4585,14 @@ static int replace_user_table(THD *thd, const User_table &user_table,
                lex->account_options.max_statement_time != 0.0);
 
     if (lex->account_options.account_locked != ACCOUNTLOCK_UNSPECIFIED)
-      user_table.set_account_locked(new_acl_user.account_locked);
+      user_table.set_account_locked(new_acl_user->account_locked);
 
     if (nauth)
-      user_table.set_password_last_changed(new_acl_user.password_last_changed);
+      user_table.set_password_last_changed(new_acl_user->password_last_changed);
     if (lex->account_options.password_expire != PASSWORD_EXPIRE_UNSPECIFIED)
     {
-      user_table.set_password_lifetime(new_acl_user.password_lifetime);
-      user_table.set_password_expired(new_acl_user.password_expired);
+      user_table.set_password_lifetime(new_acl_user->password_lifetime);
+      user_table.set_password_expired(new_acl_user->password_expired);
     }
   }
 
@@ -4611,10 +4642,10 @@ end:
     else
     {
       if (old_acl_user)
-        *old_acl_user= new_acl_user;
+        old_acl_user->shallow_copy(*new_acl_user);
       else
       {
-        push_new_user(new_acl_user);
+        push_new_user(*new_acl_user);
         rebuild_acl_users();
 
         /* Rebuild 'acl_check_hosts' since 'acl_users' has been modified */
