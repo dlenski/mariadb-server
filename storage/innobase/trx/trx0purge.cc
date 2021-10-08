@@ -110,30 +110,38 @@ TRANSACTIONAL_INLINE inline bool TrxUndoRsegsIterator::set_next()
 
 	purge_sys.rseg = *m_iter++;
 	mysql_mutex_unlock(&purge_sys.pq_mutex);
-#ifdef SUX_LOCK_GENERIC
-	purge_sys.rseg->latch.rd_lock();
-#else
-	transactional_shared_lock_guard<srw_spin_lock_low> rg
-		{purge_sys.rseg->latch};
-#endif
 
-	ut_a(purge_sys.rseg->last_page_no != FIL_NULL);
-	ut_ad(purge_sys.rseg->last_trx_no() == m_rsegs.trx_no);
-
-	/* We assume in purge of externally stored fields that space id is
-	in the range of UNDO tablespace space ids */
+	/* We assume in purge of externally stored fields that space
+	id is in the range of UNDO tablespace space ids */
 	ut_ad(purge_sys.rseg->space->id == TRX_SYS_SPACE
 	      || srv_is_undo_tablespace(purge_sys.rseg->space->id));
 
-	ut_a(purge_sys.tail.trx_no <= purge_sys.rseg->last_trx_no());
+	trx_id_t last_trx_no, tail_trx_no;
+	{
+#ifdef SUX_LOCK_GENERIC
+		purge_sys.rseg->latch.rd_lock();
+#else
+		transactional_shared_lock_guard<srw_spin_lock_low> rg
+			{purge_sys.rseg->latch};
+#endif
+		last_trx_no = purge_sys.rseg->last_trx_no();
+		tail_trx_no = purge_sys.tail.trx_no;
 
-	purge_sys.tail.trx_no = purge_sys.rseg->last_trx_no();
-	purge_sys.hdr_offset = purge_sys.rseg->last_offset();
-	purge_sys.hdr_page_no = purge_sys.rseg->last_page_no;
+		purge_sys.tail.trx_no = last_trx_no;
+		purge_sys.hdr_offset = purge_sys.rseg->last_offset();
+		purge_sys.hdr_page_no = purge_sys.rseg->last_page_no;
 
 #ifdef SUX_LOCK_GENERIC
-	purge_sys.rseg->latch.rd_unlock();
+		purge_sys.rseg->latch.rd_unlock();
 #endif
+	}
+
+	/* Only the purge coordinator task will access
+	purge_sys.rseg_iter or purge_sys.hdr_page_no. */
+	ut_ad(last_trx_no == m_rsegs.trx_no);
+	ut_a(purge_sys.hdr_page_no != FIL_NULL);
+	ut_a(tail_trx_no <= last_trx_no);
+
 	return(true);
 }
 
