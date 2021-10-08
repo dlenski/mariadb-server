@@ -278,6 +278,11 @@ public:
   /** @return whether an exclusive lock may be held by any thread */
   bool is_locked() const noexcept
   { return readers.load(std::memory_order_acquire) == WRITER; }
+
+  void lock_shared() { rd_lock(); }
+  void unlock_shared() { rd_unlock(); }
+  void lock() { wr_lock(); }
+  void unlock() { wr_unlock(); }
 #endif
 };
 
