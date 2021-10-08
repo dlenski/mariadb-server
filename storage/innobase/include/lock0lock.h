@@ -848,13 +848,14 @@ public:
   void deadlock_check();
 
   /** Cancel a waiting lock request.
-  @param lock          waiting lock request
-  @param trx           active transaction
-  @param check_victim  whether to check trx->lock.was_chosen_as_deadlock_victim
+  @tparam check_victim  whether to check for DB_DEADLOCK
+  @param lock           waiting lock request
+  @param trx            active transaction
   @retval DB_SUCCESS    if no lock existed
   @retval DB_DEADLOCK   if trx->lock.was_chosen_as_deadlock_victim was set
   @retval DB_LOCK_WAIT  if the lock was canceled */
-  static dberr_t cancel(trx_t *trx, lock_t *lock, bool check_victim);
+  template<bool check_victim>
+  static dberr_t cancel(trx_t *trx, lock_t *lock);
   /** Cancel a waiting lock request (if any) when killing a transaction */
   static void cancel(trx_t *trx);
 

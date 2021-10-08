@@ -1863,7 +1863,7 @@ dberr_t lock_wait(que_thr_t *thr)
 
   if (lock_t *lock= trx->lock.wait_lock)
   {
-    lock_sys_t::cancel(trx, lock, false);
+    lock_sys_t::cancel<false>(trx, lock);
     lock_sys.deadlock_check();
   }
 
@@ -3794,10 +3794,10 @@ TRANSACTIONAL_TARGET static bool lock_release_try(trx_t *trx)
   bool all_released= true;
 restart:
   ulint count= 1000;
-#ifdef NO_ELISION
-  // FIXME: try to free things in memory transactions,
-  // only attempting to free the last item in each transaction.
-#endif
+  /* We will not attempt hardware lock elision (memory transaction)
+  here. Both lock_rec_dequeue_from_page() and lock_table_dequeue()
+  would likely lead to a memory transaction due to a system call, to
+  wake up a waiting transaction. */
   lock_sys.rd_lock(SRW_LOCK_CALL);
   trx->mutex_lock();
 
@@ -5531,22 +5531,21 @@ void lock_sys_t::cancel_lock_wait_for_trx(trx_t *trx)
 #endif /* WITH_WSREP */
 
 /** Cancel a waiting lock request.
-@param lock   waiting lock request
-@param trx    active transaction
-@param check_victim  whether to check trx->lock.was_chosen_as_deadlock_victim
+@tparam check_victim  whether to check for DB_DEADLOCK
+@param lock           waiting lock request
+@param trx            active transaction
 @retval DB_SUCCESS    if no lock existed
 @retval DB_DEADLOCK   if trx->lock.was_chosen_as_deadlock_victim was set
 @retval DB_LOCK_WAIT  if the lock was canceled */
-TRANSACTIONAL_TARGET
-dberr_t lock_sys_t::cancel(trx_t *trx, lock_t *lock, bool check_victim)
+template<bool check_victim>
+dberr_t lock_sys_t::cancel(trx_t *trx, lock_t *lock)
 {
   mysql_mutex_assert_owner(&lock_sys.wait_mutex);
   ut_ad(trx->lock.wait_lock == lock);
   ut_ad(trx->state == TRX_STATE_ACTIVE);
   dberr_t err= DB_SUCCESS;
-#ifndef NO_ELISION
-  // FIXME
-#endif
+  /* This would be too large for a memory transaction, except in the
+  DB_DEADLOCK case, which was already tested in lock_trx_handle_wait(). */
   if (lock->is_table())
   {
     if (!lock_sys.rd_lock_try())
@@ -5626,7 +5625,7 @@ void lock_sys_t::cancel(trx_t *trx)
     if (!trx->dict_operation)
     {
       trx->error_state= DB_INTERRUPTED;
-      cancel(trx, lock, false);
+      cancel<false>(trx, lock);
     }
   }
   lock_sys.deadlock_check();
@@ -5679,7 +5678,7 @@ dberr_t lock_trx_handle_wait(trx_t *trx)
   if (trx->lock.was_chosen_as_deadlock_victim)
     err= DB_DEADLOCK;
   else if (lock_t *wait_lock= trx->lock.wait_lock)
-    err= lock_sys_t::cancel(trx, wait_lock, true);
+    err= lock_sys_t::cancel<true>(trx, wait_lock);
   lock_sys.deadlock_check();
   mysql_mutex_unlock(&lock_sys.wait_mutex);
   return err;
@@ -6113,7 +6112,7 @@ static bool Deadlock::check_and_resolve(trx_t *trx)
     return false;
 
   if (lock_t *wait_lock= trx->lock.wait_lock)
-    lock_sys_t::cancel(trx, wait_lock, false);
+    lock_sys_t::cancel<false>(trx, wait_lock);
 
   lock_sys.deadlock_check();
   return true;
