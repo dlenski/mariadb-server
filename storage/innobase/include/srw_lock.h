@@ -324,6 +324,11 @@ public:
     // FIXME: this returns false positives for shared locks
     return is_locked_or_waiting();
   }
+
+  void lock_shared() { rd_lock(); }
+  void unlock_shared() { rd_unlock(); }
+  void lock() { wr_lock(); }
+  void unlock() { wr_unlock(); }
 #endif
 };
 
