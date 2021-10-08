@@ -805,8 +805,12 @@ public:
   /** @return whether the current thread is the lock_sys.latch writer */
   bool is_writer() const
   {
+# ifdef SUX_LOCK_GENERIC
+    return writer.load(std::memory_order_relaxed) == os_thread_get_curr_id();
+# else
     return writer.load(std::memory_order_relaxed) == os_thread_get_curr_id() ||
       (xtest() && !latch.is_locked_or_waiting());
+# endif
   }
   /** Assert that a lock shard is exclusively latched (by some thread) */
   void assert_locked(const lock_t &lock) const;
