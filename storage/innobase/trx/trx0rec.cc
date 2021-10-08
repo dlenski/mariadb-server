@@ -1927,7 +1927,6 @@ dberr_t trx_undo_report_rename(trx_t* trx, const dict_table_t* table)
 				undo->top_page_no = undo->last_page_no;
 				undo->top_offset  = offset;
 				undo->top_undo_no = trx->undo_no++;
-				undo->guess_block = block;
 				ut_ad(!undo->empty());
 
 				err = DB_SUCCESS;
@@ -2163,7 +2162,6 @@ err_exit:
 			mtr.commit();
 			undo->top_offset  = offset;
 			undo->top_undo_no = trx->undo_no++;
-			undo->guess_block = undo_block;
 			ut_ad(!undo->empty());
 
 			if (!is_temp) {

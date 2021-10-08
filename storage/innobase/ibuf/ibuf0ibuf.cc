@@ -463,9 +463,9 @@ ibuf_init_at_db_start(void)
 	ibuf.index->id = DICT_IBUF_ID_MIN + IBUF_SPACE_ID;
 	ibuf.index->n_uniq = REC_MAX_N_FIELDS;
 	ibuf.index->lock.SRW_LOCK_INIT(index_tree_rw_lock_key);
-#ifdef BTR_CUR_ADAPT
+#ifdef BTR_CUR_HASH_ADAPT
 	ibuf.index->search_info = btr_search_info_create(ibuf.index->heap);
-#endif /* BTR_CUR_ADAPT */
+#endif /* BTR_CUR_HASH_ADAPT */
 	ibuf.index->page = FSP_IBUF_TREE_ROOT_PAGE_NO;
 	ut_d(ibuf.index->cached = TRUE);
 
@@ -670,7 +670,7 @@ ibuf_bitmap_get_map_page(
 {
 	return buf_page_get_gen(
 		ibuf_bitmap_page_no_calc(page_id, zip_size),
-		zip_size, RW_X_LATCH, NULL, BUF_GET_POSSIBLY_FREED, mtr);
+		zip_size, RW_X_LATCH, BUF_GET_POSSIBLY_FREED, mtr);
 }
 
 /************************************************************************//**
@@ -954,7 +954,7 @@ ibuf_page_low(
 
 		buf_block_t* block = buf_page_get_gen(
 			ibuf_bitmap_page_no_calc(page_id, zip_size),
-			zip_size, RW_NO_LATCH, NULL, BUF_GET_NO_LATCH,
+			zip_size, RW_NO_LATCH, BUF_GET_NO_LATCH,
 			&local_mtr, &err);
 
 		ret = ibuf_bitmap_page_get_bits_low(
@@ -2280,7 +2280,7 @@ tablespace_deleted:
 			mtr.start();
 			dberr_t err;
 			buf_page_get_gen(page_id_t(space_id, page_nos[i]),
-					 zip_size, RW_X_LATCH, nullptr,
+					 zip_size, RW_X_LATCH,
 					 BUF_GET_POSSIBLY_FREED,
 					 &mtr, &err, true);
 			mtr.commit();

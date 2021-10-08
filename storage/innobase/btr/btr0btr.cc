@@ -327,7 +327,7 @@ btr_root_adjust_on_import(
 
 	buf_block_t* block = buf_page_get_gen(
 		page_id_t(table->space->id, index->page),
-		table->space->zip_size(), RW_X_LATCH, NULL, BUF_GET,
+		table->space->zip_size(), RW_X_LATCH, BUF_GET,
 		&mtr, &err);
 	if (!block) {
 		ut_ad(err != DB_SUCCESS);
@@ -838,7 +838,7 @@ buf_block_t *btr_free_root_check(const page_id_t page_id, ulint zip_size,
   ut_ad(index_id != BTR_FREED_INDEX_ID);
 
   buf_block_t *block= buf_page_get_gen(page_id, zip_size, RW_X_LATCH,
-                                       nullptr, BUF_GET_POSSIBLY_FREED, mtr);
+				       BUF_GET_POSSIBLY_FREED, mtr);
 
   if (!block);
   else if (block->page.status == buf_page_t::FREED)
@@ -1134,7 +1134,7 @@ void btr_drop_temporary_table(const dict_table_t &table)
        index= dict_table_get_next_index(index))
   {
     if (buf_block_t *block= buf_page_get_low({SRV_TMP_SPACE_ID, index->page}, 0,
-                                             RW_X_LATCH, nullptr, BUF_GET, &mtr,
+                                             RW_X_LATCH, BUF_GET, &mtr,
                                              nullptr, false))
     {
       btr_free_but_not_root(block, MTR_LOG_NO_REDO);

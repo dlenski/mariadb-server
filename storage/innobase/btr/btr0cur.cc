@@ -792,8 +792,7 @@ btr_cur_optimistic_latch_leaves(
 				page_id_t(cursor->index->table->space_id,
 					  left_page_no),
 				cursor->index->table->space->zip_size(),
-				mode, nullptr, BUF_GET_POSSIBLY_FREED,
-				mtr, &err);
+				mode, BUF_GET_POSSIBLY_FREED, mtr, &err);
 
 			if (!cursor->left_block) {
 				cursor->index->table->file_unreadable = true;
@@ -1246,7 +1245,6 @@ btr_cur_search_to_nth_level_func(
 {
 	page_t*		page = NULL; /* remove warning */
 	buf_block_t*	block;
-	buf_block_t*	guess;
 	ulint		height;
 	ulint		up_match;
 	ulint		up_bytes;
@@ -1284,9 +1282,6 @@ btr_cur_search_to_nth_level_func(
 
 	DBUG_ENTER("btr_cur_search_to_nth_level");
 
-#ifdef BTR_CUR_ADAPT
-	btr_search_t*	info;
-#endif /* BTR_CUR_ADAPT */
 	mem_heap_t*	heap		= NULL;
 	rec_offs	offsets_[REC_OFFS_NORMAL_SIZE];
 	rec_offs*	offsets		= offsets_;
@@ -1384,13 +1379,8 @@ btr_cur_search_to_nth_level_func(
 	cursor->flag = BTR_CUR_BINARY;
 	cursor->index = index;
 
-#ifndef BTR_CUR_ADAPT
-	guess = NULL;
-#else
-	info = btr_search_get_info(index);
-	guess = info->root_guess;
-
 #ifdef BTR_CUR_HASH_ADAPT
+	btr_search_t*	info = btr_search_get_info(index);
 
 # ifdef UNIV_SEARCH_PERF_STAT
 	info->n_searches++;
@@ -1428,13 +1418,10 @@ btr_cur_search_to_nth_level_func(
 	} else {
 		++btr_cur_n_non_sea;
 	}
-# endif /* BTR_CUR_HASH_ADAPT */
-#endif /* BTR_CUR_ADAPT */
 
 	/* If the hash search did not succeed, do binary search down the
 	tree */
 
-#ifdef BTR_CUR_HASH_ADAPT
 	if (ahi_latch) {
 		/* Release possible search latch to obey latching order */
 		ahi_latch->rd_unlock();
@@ -1600,7 +1587,7 @@ search_loop:
 retry_page_get:
 	ut_ad(n_blocks < BTR_MAX_LEVELS);
 	tree_savepoints[n_blocks] = mtr_set_savepoint(mtr);
-	block = buf_page_get_gen(page_id, zip_size, rw_latch, guess,
+	block = buf_page_get_gen(page_id, zip_size, rw_latch,
 				 buf_mode, mtr, &err,
 				 height == 0 && !index->is_clust());
 	tree_blocks[n_blocks] = block;
@@ -1716,7 +1703,7 @@ retry_page_get:
 				= mtr_set_savepoint(mtr);
 			get_block = buf_page_get_gen(
 				page_id_t(page_id.space(), left_page_no),
-				zip_size, rw_latch, NULL, buf_mode,
+				zip_size, rw_latch, buf_mode,
 				mtr, &err);
 			prev_tree_blocks[prev_n_blocks] = get_block;
 			prev_n_blocks++;
@@ -1747,7 +1734,7 @@ retry_page_get:
 
 		tree_savepoints[n_blocks] = mtr_set_savepoint(mtr);
 		block = buf_page_get_gen(page_id, zip_size,
-					 rw_latch, NULL, buf_mode, mtr, &err);
+					 rw_latch, buf_mode, mtr, &err);
 		tree_blocks[n_blocks] = block;
 
 		if (err != DB_SUCCESS) {
@@ -1820,10 +1807,6 @@ retry_page_get:
 			cursor->rtr_info->thr = cursor->thr;
 			rtr_get_mbr_from_tuple(tuple, &cursor->rtr_info->mbr);
 		}
-
-#ifdef BTR_CUR_ADAPT
-		info->root_guess = block;
-#endif
 	}
 
 	if (height == 0) {
@@ -2021,7 +2004,6 @@ retry_page_get:
 		ut_ad(height > 0);
 
 		height--;
-		guess = NULL;
 
 		node_ptr = page_cur_get_rec(page_cursor);
 
@@ -2364,8 +2346,6 @@ need_opposite_intention:
 		/* btr_insert_into_right_sibling() might cause
 		deleting node_ptr at upper level */
 
-		guess = NULL;
-
 		if (height == 0) {
 			/* release the leaf pages if latched */
 			for (uint i = 0; i < 3; i++) {
@@ -2618,7 +2598,7 @@ btr_cur_open_at_index_side(
 			&& (latch_mode != BTR_MODIFY_TREE || height == level)
 			? upper_rw_latch : RW_NO_LATCH;
 		buf_block_t* block = buf_page_get_gen(page_id, zip_size,
-						      rw_latch, NULL, BUF_GET,
+						      rw_latch, BUF_GET,
 						      mtr, &err,
 						      height == 0
 						      && !index->is_clust());
@@ -2957,7 +2937,7 @@ btr_cur_open_at_rnd_pos(
 			&& latch_mode != BTR_MODIFY_TREE
 			? upper_rw_latch : RW_NO_LATCH;
 		buf_block_t* block = buf_page_get_gen(page_id, zip_size,
-						      rw_latch, NULL, BUF_GET,
+						      rw_latch, BUF_GET,
 						      mtr, &err,
 						      height == 0
 						      && !index->is_clust());
@@ -6056,8 +6036,7 @@ btr_estimate_n_rows_in_range_on_level(
 		the B-tree. We pass BUF_GET_POSSIBLY_FREED in order to
 		silence a debug assertion about this. */
 		block = buf_page_get_gen(page_id, zip_size, RW_S_LATCH,
-					 NULL, BUF_GET_POSSIBLY_FREED,
-					 &mtr, &err);
+					 BUF_GET_POSSIBLY_FREED, &mtr, &err);
 
 		ut_ad((block != NULL) == (err == DB_SUCCESS));
 

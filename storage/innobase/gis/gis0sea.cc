@@ -265,7 +265,7 @@ rtr_pcur_getnext_from_path(
 		block = buf_page_get_gen(
 			page_id_t(index->table->space_id,
 				  next_rec.page_no), zip_size,
-			rw_latch, NULL, BUF_GET, mtr);
+			rw_latch, BUF_GET, mtr);
 
 		if (block == NULL) {
 			continue;
@@ -1318,7 +1318,7 @@ rtr_cur_restore_position(
 search_again:
 	block = buf_page_get_gen(
 		page_id_t(index->table->space_id, page_no),
-		zip_size, RW_X_LATCH, NULL, BUF_GET, mtr);
+		zip_size, RW_X_LATCH, BUF_GET, mtr);
 
 	ut_ad(block);
 

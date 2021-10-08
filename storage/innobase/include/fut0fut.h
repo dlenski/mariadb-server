@@ -58,8 +58,7 @@ fut_get_ptr(
 	      || (rw_latch == RW_SX_LATCH));
 
 	block = buf_page_get_gen(page_id_t(space, addr.page), zip_size,
-				 rw_latch, nullptr, BUF_GET_POSSIBLY_FREED,
-				 mtr);
+				 rw_latch, BUF_GET_POSSIBLY_FREED, mtr);
 	if (!block) {
 	} else if (block->page.status == buf_page_t::FREED) {
 		block = nullptr;

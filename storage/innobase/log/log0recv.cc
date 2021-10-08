@@ -971,8 +971,7 @@ public:
 				continue;
 			}
 			if (buf_block_t* block = buf_page_get_low(
-				    i.first, 0, RW_X_LATCH, nullptr,
-				    BUF_GET_IF_IN_POOL,
+				    i.first, 0, RW_X_LATCH, BUF_GET_IF_IN_POOL,
 				    &mtr, nullptr, false)) {
 				if (UNIV_LIKELY_NULL(block->page.zip.data)) {
 					switch (fil_page_get_type(
@@ -3105,7 +3104,7 @@ next_page:
         mtr.start();
         mtr.set_log_mode(MTR_LOG_NO_REDO);
         if (buf_block_t *block= buf_page_get_low(page_id, 0, RW_X_LATCH,
-                                                 nullptr, BUF_GET_IF_IN_POOL,
+                                                 BUF_GET_IF_IN_POOL,
                                                  &mtr, nullptr, false))
         {
           recv_recover_page(block, mtr, p);

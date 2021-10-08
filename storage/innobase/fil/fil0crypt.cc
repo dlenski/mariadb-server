@@ -958,7 +958,6 @@ fil_crypt_read_crypt_data(fil_space_t* space)
 	mtr.start();
 	if (buf_block_t* block = buf_page_get_gen(page_id_t(space->id, 0),
 						  zip_size, RW_S_LATCH,
-						  nullptr,
 						  BUF_GET_POSSIBLY_FREED,
 						  &mtr)) {
 		if (block->page.status == buf_page_t::FREED) {
@@ -1019,11 +1018,9 @@ func_exit:
 	mtr.start();
 
 	/* 2 - get page 0 */
-	dberr_t err = DB_SUCCESS;
 	if (buf_block_t* block = buf_page_get_gen(
 		    page_id_t(space->id, 0), space->zip_size(),
-		    RW_X_LATCH, NULL, BUF_GET_POSSIBLY_FREED,
-		    &mtr, &err)) {
+		    RW_X_LATCH, BUF_GET_POSSIBLY_FREED, &mtr)) {
 		if (block->page.status == buf_page_t::FREED) {
 			goto abort;
 		}
@@ -1725,10 +1722,8 @@ fil_crypt_get_page_throttle(
 		return NULL;
 	}
 
-	buf_block_t* block = buf_page_get_gen(page_id, zip_size, RW_X_LATCH,
-					      NULL,
-					      BUF_PEEK_IF_IN_POOL, mtr);
-	if (block != NULL) {
+	if (buf_block_t* block = buf_page_get_gen(page_id, zip_size, RW_X_LATCH,
+						  BUF_PEEK_IF_IN_POOL, mtr)) {
 		/* page was in buffer pool */
 		state->crypt_stat.pages_read_from_cache++;
 		return block;
@@ -1746,9 +1741,8 @@ fil_crypt_get_page_throttle(
 	state->crypt_stat.pages_read_from_disk++;
 
 	const ulonglong start = my_interval_timer();
-	block = buf_page_get_gen(page_id, zip_size,
-				 RW_X_LATCH,
-				 NULL, BUF_GET_POSSIBLY_FREED, mtr);
+	buf_block_t* block = buf_page_get_gen(page_id, zip_size, RW_X_LATCH,
+					      BUF_GET_POSSIBLY_FREED, mtr);
 	const ulonglong end = my_interval_timer();
 
 	state->cnt_waited++;
@@ -1995,7 +1989,7 @@ fil_crypt_flush_space(
 
 	if (buf_block_t* block = buf_page_get_gen(
 		    page_id_t(space->id, 0), space->zip_size(),
-		    RW_X_LATCH, NULL, BUF_GET_POSSIBLY_FREED, &mtr)) {
+		    RW_X_LATCH, BUF_GET_POSSIBLY_FREED, &mtr)) {
 		if (block->page.status != buf_page_t::FREED) {
 			mtr.set_named_space(space);
 			crypt_data->write_page0(block, &mtr);

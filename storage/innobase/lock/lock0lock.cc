@@ -4725,7 +4725,7 @@ static void lock_rec_block_validate(const page_id_t page_id)
 		block = buf_page_get_gen(
 			page_id,
 			space->zip_size(),
-			RW_X_LATCH, NULL,
+			RW_X_LATCH,
 			BUF_GET_POSSIBLY_FREED,
 			&mtr, &err);
 
