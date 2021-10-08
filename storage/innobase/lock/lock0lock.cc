@@ -1649,7 +1649,7 @@ void lock_sys_t::wait_resume(THD *thd, my_hrtime_t start, my_hrtime_t now)
 }
 
 #ifdef HAVE_REPLICATION
-ATTRIBUTE_NOINLINE TRANSACTIONAL_TARGET MY_ATTRIBUTE((nonnull))
+ATTRIBUTE_NOINLINE MY_ATTRIBUTE((nonnull))
 /** Report lock waits to parallel replication.
 @param trx       transaction that may be waiting for a lock
 @param wait_lock lock that is being waited for */
@@ -1663,9 +1663,8 @@ static void lock_wait_rpl_report(trx_t *trx)
   if (!wait_lock)
     return;
   ut_ad(!(wait_lock->type_mode & LOCK_AUTO_INC));
-#ifdef NO_ELISION
-  // FIXME
-#endif
+  /* This would likely be too large to attempt to use a memory transaction,
+  even for wait_lock->is_table(). */
   if (!lock_sys.wr_lock_try())
   {
     mysql_mutex_unlock(&lock_sys.wait_mutex);
@@ -3939,14 +3938,14 @@ released:
 }
 
 /** Release locks on a table whose creation is being rolled back */
-TRANSACTIONAL_TARGET ATTRIBUTE_COLD
+ATTRIBUTE_COLD
 void lock_release_on_rollback(trx_t *trx, dict_table_t *table)
 {
   trx->mod_tables.erase(table);
 
-#ifdef NO_ELISION
-  // FIXME: try to free locks, one per memory transaction
-#endif
+  /* This is very rarely executed code, in the rare case that an
+  CREATE TABLE operation is being rolled back. Theoretically,
+  we might try to remove the locks in multiple memory transactions. */
   lock_sys.wr_lock(SRW_LOCK_CALL);
   trx->mutex_lock();
 
@@ -4859,7 +4858,7 @@ lock_rec_insert_check_and_lock(
                                                          g.cell(), id,
                                                          heap_no, trx))
       {
-        TMTrxGuard tg{*trx}; // FIXME: does this abort too often?
+        TMTrxGuard tg{*trx};
         err= lock_rec_enqueue_waiting(c_lock, type_mode, id, block->frame,
                                       heap_no, index, thr, nullptr);
       }
@@ -5693,6 +5692,7 @@ dberr_t lock_trx_handle_wait(trx_t *trx)
   @param[in]  table  check if there are any locks held on records in this table
                      or on the table itself
 */
+
 static my_bool lock_table_locks_lookup(rw_trx_hash_element_t *element,
                                        const dict_table_t *table)
 {
