@@ -334,6 +334,7 @@ TRANSACTIONAL_INLINE inline ulint dict_index_t::n_ahi_pages() const
     return 0;
   srw_spin_lock *latch= &btr_search_sys.get_part(*this)->latch;
 #if !defined NO_ELISION && !defined SUX_LOCK_GENERIC
+  x_context;
   if (xbegin())
   {
     if (latch->is_locked())
