@@ -77,13 +77,8 @@ TRANSACTIONAL_INLINE static inline void xend() { _xend(); }
 constexpr bool have_transactional_memory= true;
 static inline bool transactional_lock_enabled() { return true; }
 #  include <htmxlintrin.h>
-#  if defined __GNUC__ && defined __powerpc64__
-#   define TRANSACTIONAL_TARGET __attribute__((target("htm")))
-#   define TRANSACTIONAL_INLINE __attribute__((target("htm"),always_inline))
-#  else
-#   define TRANSACTIONAL_TARGET /* nothing */
-#   define TRANSACTIONAL_INLINE /* nothing */
-#  endif
+#  define TRANSACTIONAL_TARGET /* nothing */
+#  define TRANSACTIONAL_INLINE /* nothing */
 
 #define x_context TM_buff_type TM_buff
 #define xbegin() __TM_begin(TM_buff) == _HTM_TBEGIN_STARTED
@@ -95,7 +90,7 @@ static inline bool xtest()
 }
 #  endif
 
-template<unsigned char i> static inline void xabort() { __TM_abort(); }
+static inline void xabort() { __TM_abort(); }
 
 static inline void xend() { __TM_end(); }
 # endif
