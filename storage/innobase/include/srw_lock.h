@@ -295,29 +295,29 @@ class srw_lock_
   friend srw_lock_impl<spinloop>;
 # endif
 # ifdef _WIN32
-  SRWLOCK lock;
+  SRWLOCK lk;
 # else
-  rw_lock_t lock;
+  rw_lock_t lk;
 # endif
 
   void rd_wait();
   void wr_wait();
 public:
-  void init() { IF_WIN(,my_rwlock_init(&lock, nullptr)); }
-  void destroy() { IF_WIN(,rwlock_destroy(&lock)); }
+  void init() { IF_WIN(,my_rwlock_init(&lk, nullptr)); }
+  void destroy() { IF_WIN(,rwlock_destroy(&lk)); }
   inline void rd_lock();
   inline void wr_lock();
   bool rd_lock_try()
-  { return IF_WIN(TryAcquireSRWLockShared(&lock), !rw_tryrdlock(&lock)); }
+  { return IF_WIN(TryAcquireSRWLockShared(&lk), !rw_tryrdlock(&lk)); }
   void rd_unlock()
-  { IF_WIN(ReleaseSRWLockShared(&lock), rw_unlock(&lock)); }
+  { IF_WIN(ReleaseSRWLockShared(&lk), rw_unlock(&lk)); }
   bool wr_lock_try()
-  { return IF_WIN(TryAcquireSRWLockExclusive(&lock), !rw_trywrlock(&lock)); }
+  { return IF_WIN(TryAcquireSRWLockExclusive(&lk), !rw_trywrlock(&lk)); }
   void wr_unlock()
-  { IF_WIN(ReleaseSRWLockExclusive(&lock), rw_unlock(&lock)); }
+  { IF_WIN(ReleaseSRWLockExclusive(&lk), rw_unlock(&lk)); }
 #ifdef _WIN32
   /** @return whether any lock may be held by any thread */
-  bool is_locked_or_waiting() const noexcept { return *(size_t*)(&lock) != 0; }
+  bool is_locked_or_waiting() const noexcept { return *(size_t*)(&lk) != 0; }
   /** @return whether an exclusive lock may be held by any thread */
   bool is_locked() const noexcept
   {
@@ -337,10 +337,10 @@ template<> void srw_lock_<true>::wr_wait();
 
 template<>
 inline void srw_lock_<false>::rd_lock()
-{ IF_WIN(AcquireSRWLockShared(&lock), rw_rdlock(&lock)); }
+{ IF_WIN(AcquireSRWLockShared(&lk), rw_rdlock(&lk)); }
 template<>
 inline void srw_lock_<false>::wr_lock()
-{ IF_WIN(AcquireSRWLockExclusive(&lock), rw_wrlock(&lock)); }
+{ IF_WIN(AcquireSRWLockExclusive(&lk), rw_wrlock(&lk)); }
 
 template<>
 inline void srw_lock_<true>::rd_lock() { if (!rd_lock_try()) rd_wait(); }

@@ -511,7 +511,7 @@ template<> void srw_lock_<true>::rd_wait()
       return;
   }
 
-  IF_WIN(AcquireSRWLockShared(&lock), rw_rdlock(&lock));
+  IF_WIN(AcquireSRWLockShared(&lk), rw_rdlock(&lk));
 }
 
 template<> void srw_lock_<true>::wr_wait()
@@ -525,7 +525,7 @@ template<> void srw_lock_<true>::wr_wait()
       return;
   }
 
-  IF_WIN(AcquireSRWLockExclusive(&lock), rw_wrlock(&lock));
+  IF_WIN(AcquireSRWLockExclusive(&lk), rw_wrlock(&lk));
 }
 #endif
 
