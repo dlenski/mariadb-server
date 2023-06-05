@@ -14457,6 +14457,14 @@ bool acl_authenticate(THD *thd, uint com_change_user_pkt_len)
     DBUG_ASSERT(mpvio.status == MPVIO_EXT::RESTART ||
                 mpvio.status == MPVIO_EXT::SUCCESS);
   }
+  else if (1)
+  {
+    my_error(ER_INTERNAL_ERROR, MYF(0),
+             "Client will accept this error as genuine even if running with "
+             "--ssl --ssl-verify-server-cert, and even though this error is "
+             "sent in plaintext PRIOR TO TLS HANDSHAKE.");
+    res= CR_ERROR;
+  }
   else
   {
     /* mark the thd as having no scramble yet */
