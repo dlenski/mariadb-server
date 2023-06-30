@@ -282,6 +282,9 @@ enum enum_indicator_type
 /* support of array binding */
 #define MARIADB_CLIENT_STMT_BULK_OPERATIONS (1ULL << 34)
 
+/* Server doesn't improperly read the pre-TLS dummy packet beyond the initial 2 bytes */
+#define CLIENT_CAN_SEND_DUMMY_HANDSHAKE_PACKET (1ULL << 37)
+
 #ifdef HAVE_COMPRESS
 #define CAN_CLIENT_COMPRESS CLIENT_COMPRESS
 #else
