@@ -13754,18 +13754,29 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
   DBUG_ASSERT(net->read_pos[pkt_len] == 0);
 
   ushort first_two_bytes_of_client_capabilities= uint2korr(net->read_pos);
-  if (first_two_bytes_of_client_capabilities & CLIENT_SSL)
+  bool pre_tls_client_packet_is_dummy= (pkt_len==2 && first_two_bytes_of_client_capabilities == CLIENT_SSL);
+  bool pre_tls_client_packet_wants_ssl= first_two_bytes_of_client_capabilities & CLIENT_SSL;
+
+  if (pre_tls_client_packet_wants_ssl)
   {
     /* Client wants to use TLS. This packet is really just a
      * dummy which gets sent before the TLS handshake, in order
      * to trigger the server (us) to start the TLS handshake.
      *
-     * We should ignore everything else in this packet until
-     * after the TLS handshake.
+     * We ignore everything else in this pre-TLS packet, even though
+     * older clients send much of the same information that they will
+     * re-send over the TLS channel.
+     *
+     * This pre-TLS packet is untrustworthy AND if the server acts on
+     * its content, that FORCES the client to send more information
+     * in the clear.
      */
 
     unsigned long errptr __attribute__((unused));
-    DBUG_PRINT("info", ("client capabilities have TLS/SSL bit set"));
+    if (pre_tls_client_packet_is_dummy)
+        DBUG_PRINT("info", ("client sent 2-byte dummy packet with only the TLS/SSL bit set"));
+    else
+        DBUG_PRINT("info", ("client capabilities have TLS/SSL bit set"));
 
     /* Do the SSL layering. */
     if (!ssl_acceptor_fd)
@@ -13799,7 +13810,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
       DBUG_RETURN(packet_error);
     }
 
-    /* Re-load the FIRST TWO BYTES of the client handshake packet */
+    /* Re-load the FIRST TWO BYTES of the capabilities from the packet sent over TLS. */
     first_two_bytes_of_client_capabilities = uint2korr(net->read_pos);
   }
 
@@ -13819,6 +13830,26 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
         (((ulonglong)uint4korr(net->read_pos + 28)) << 32);
       client_capabilities|= ext_client_capabilities;
     }
+  }
+  bool post_tls_client_packet_indicates_dummy_support= (client_capabilities & CLIENT_CAN_SEND_DUMMY_HANDSHAKE_PACKET);
+
+  if (pre_tls_client_packet_wants_ssl
+      && post_tls_client_packet_indicates_dummy_support
+      && !pre_tls_client_packet_is_dummy)
+  {
+    /* 1. We told the client in our server greeting that we support the pre-TLS client packet containing only the TLS/SSL flag.
+     *    [Our server greeting packet is sent in the clear; no guarantee that it is delivered unmodified to the client.]
+     * 2. The client told us in its pre-TLS packet that it wants to use SSL.
+     * 3. The client told us in its post-TLS packet that it knows how to send the pre-TLS client packet containing only the TLS/SSL flag.
+     *    [We received this information via TLS; it is authentic.]
+     * 4. Nevertheless, the client DID NOT SEND a pre-TLS client packet containing only the TLS/SSL flag.
+     *
+     * The only way this can happen is if the client is being downgraded by an active MITM attacker which
+     * disables the CLIENT_CAN_SEND_DUMMY_HANDSHAKE_PACKET bit in our server greeting packet.
+     */
+    DBUG_PRINT("error", ("aborting connection because it is being MITM'ed by an attacker "
+                         "that strips the CLIENT_CAN_SEND_DUMMY_HANDSHAKE_PACKET bit from our server capabilities"));
+    DBUG_RETURN(packet_error);
   }
 
   /* Disable those bits which are not supported by the client. */
