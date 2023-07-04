@@ -163,6 +163,7 @@ static ulong opt_max_allowed_packet, opt_net_buffer_length;
 static uint verbose=0,opt_silent=0,opt_mysql_port=0, opt_local_infile=0;
 static uint my_end_arg;
 static char * opt_mysql_unix_port=0;
+static my_bool opt_backwards_compatible_insecure_ssl=0;
 static int connect_flag=CLIENT_INTERACTIVE;
 static my_bool opt_binary_mode= FALSE;
 static int interrupted_query= 0;
@@ -1377,6 +1378,8 @@ static bool do_connect(MYSQL *mysql, const char *host, const char *user,
   }
   mysql_options(mysql,MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
                 (char*)&opt_ssl_verify_server_cert);
+  mysql_options(mysql,MYSQL_OPT_BACKWARDS_COMPATIBLE_INSECURE_SSL,
+                (char*)&opt_backwards_compatible_insecure_ssl);
 #endif
   if (opt_protocol)
     mysql_options(mysql,MYSQL_OPT_PROTOCOL,(char*)&opt_protocol);
@@ -1642,6 +1645,12 @@ static struct my_option my_long_options[] =
    &opt_mysql_unix_port, &opt_mysql_unix_port, 0, GET_STR_ALLOC,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 #include "sslopt-longopts.h"
+  {"backwards-compatible-insecure-ssl", 0,
+   "Allow connection to old servers that have known TLS/SSL bugs, "
+   "including leaking and trusting information sent prior to the TLS "
+   "handshake.",
+   &opt_backwards_compatible_insecure_ssl, &opt_backwards_compatible_insecure_ssl,
+   0, GET_BOOL, OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"table", 't', "Output in table format.", &output_tables,
    &output_tables, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"tee", OPT_TEE,
